@@ -4,7 +4,7 @@ CXX := clang++
 
 # Default flags
 CFLAGS   ?= -g -O2 -fPIC
-CXXFLAGS ?= $(CFLAGS) -I/usr/local/Cellar/openssl/1.0.2o/include/
+CXXFLAGS ?= $(CFLAGS) 
 LDFLAGS  += $(addprefix -l,$(LIBS))
 
 # Default source and object files

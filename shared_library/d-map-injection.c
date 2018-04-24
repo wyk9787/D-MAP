@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include <math.h>
 #include <openssl/md5.h>
 #include <pthread.h>
@@ -9,9 +8,6 @@
 #include <string.h>
 #include <unistd.h>
 
-__attribute__((constructor)) void init() {
-  printf("Starting up!\n");
-}
 
 #define NUM_THREAD 4
 #define MAX_USERNAME_LENGTH 24

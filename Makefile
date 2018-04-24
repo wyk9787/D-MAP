@@ -1,4 +1,4 @@
 ROOT = .
-TARGETS = d-map-injection.so
+DIRS = shared_library client
 
 include $(ROOT)/common.mk
