@@ -9,9 +9,11 @@
 #include <netdb.h>
 #include <pthread.h>
 #include <arpa/inet.h>
+#include <dlfcn.h>
+#include <errno.h>
 
 #define PORT_NUMBER 60519
-#define WORKER_JOIN "-1"
+#define WORKER_JOIN -1
 
 typedef int (*real_main_t)(int argc, char** argv);
 const char* shared_library = "../shared_library/d-map-injection.so";
@@ -47,6 +49,12 @@ int socket_connect(char * server_address, int port) {
 
 
 int main(int argc, char** argv) {
+
+  char * func_args[3];
+  
+  // TODO: now it is passing the string "./worker", change it to sth else later
+  func_args[0] = argv[0];
+  int index = 1;
   if(argc != 2) {
     fprintf(stderr, "Usage: %s <server address>\n", argv[0]);
     exit(EXIT_FAILURE);
@@ -54,21 +62,35 @@ int main(int argc, char** argv) {
   char* server_address = argv[1];
   int server_socket = socket_connect(server_address, PORT_NUMBER);
 
-  char msg[3];
-  msg[0] = '1';
-  msg[1] = '\n';
-  msg[2] = '\0';
-  printf(msg);
-  write(server_socket, msg, strlen(msg));
-
-  char buffer[256];
-  int bytes_read = read(s, buffer, 256);
-  if(bytes_read < 0) {
-    perror("read failed");
-    exit(2);
+  int server_socket_copy = dup(server_socket);
+  if(server_socket_copy == -1) {
+    perror("dup failed in client_thread_fn");
+    exit(EXIT_FAILURE);
   }
 
-  int input = atoi(buffer);
+  // Open the socket as a FILE stream so we can use fgets
+  FILE* input = fdopen(server_socket, "r");
+  FILE* output = fdopen(server_socket_copy, "w");
+  
+  // Check for errors
+  if(output == NULL || input == NULL) {
+    perror("fdopen failed in client_thread_fn");
+    exit(EXIT_FAILURE);
+  }
+
+  fprintf(output, "%d\n", WORKER_JOIN);
+
+  char * line = NULL;
+  size_t linecap = 0;
+  if (getline(&line, &linecap, input) > 0) {
+    char * dup = strdup(line);
+    func_args[2] = dup;
+    index++;
+  }
+  char * pathname =  strcpy(pathname,"./client/passwords.txt");
+
+  func_args[1] = pathname;
+  
 
   errno = 0;
   void* injection = dlopen(shared_library, RTLD_LAZY | RTLD_GLOBAL);
@@ -79,14 +101,13 @@ int main(int argc, char** argv) {
   dlerror();
   real_main_t real_main = (real_main_t)dlsym(injection, "entrance");
 
-  real_main(1, input);
+  real_main(3, func_args);
   char* error = dlerror();
   if(error != NULL) {
     printf("Error: %s\n", error);
     exit(1);
   }
-
-  
+ 
   
   //close
   close(server_socket);
