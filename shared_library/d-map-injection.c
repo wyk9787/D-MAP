@@ -12,7 +12,11 @@
 #define NUM_THREAD 4
 #define MAX_USERNAME_LENGTH 24
 #define PASSWORD_LENGTH 6
-#define TOTAL_PASSWORDS (pow(26.0, PASSWORD_LENGTH))
+#define NUM_WORKERS 4
+
+int SECTION_NUM;
+size_t INITIAL_PASSWORD = 0;
+size_t TOTAL_PASSWORDS;
 
 // Use this struct to pass arguments to our threads
 typedef struct thread_args { int arg; } thread_args_t;
@@ -28,7 +32,7 @@ typedef struct password_entry {
 } password_entry_t;
 
 void crack_passwords(char *plaintext);
-inline void generate_all_possibilities(size_t number);
+void generate_all_possibilities(size_t number);
 int md5_string_to_bytes(const char *md5_string, uint8_t *bytes);
 password_entry_t *read_password_file(const char *filename);
 void print_md5_bytes(const uint8_t *bytes);
@@ -58,13 +62,16 @@ void *thread_fn(void *void_args) {
 
 int entrance(int argc, char **argv) {
 
-  if (argc != 2) {
-    fprintf(stderr, "Usage: %s <path to password directory file>\n", argv[0]);
+  if (argc != 3) {
+    fprintf(stderr, "Usage: %s <path to password directory file> <#section of password this program should calculate>\n", argv[0]);
     exit(1);
   }
 
   // Read in the password file
   passwords = read_password_file(argv[1]);
+  SECTION_NUM = strtol(argv[2], NULL, 10);
+  TOTAL_PASSWORDS = pow(26.0, PASSWORD_LENGTH) / NUM_WORKERS;
+  INITIAL_PASSWORD = SECTION_NUM * TOTAL_PASSWORDS;
 
   // Initilization
   password_entry_t *current = passwords;
@@ -76,12 +83,12 @@ int entrance(int argc, char **argv) {
   // Here's a quick little thread demo.
   pthread_t threads[NUM_THREAD];
 
-  // Make two structs so we can pass arguments to our threads
+  // Make NUM_THREAD amount of structs so we can pass arguments to our threads
   thread_args_t thread_args[NUM_THREAD];
 
   // Create threads
   for (size_t i = 0; i < NUM_THREAD; i++) {
-    thread_args[i].arg = i * TOTAL_PASSWORDS / 4;
+    thread_args[i].arg = i * TOTAL_PASSWORDS / NUM_THREAD;
     if (pthread_create(&threads[i], NULL, thread_fn, &thread_args[i]) != 0) {
       perror("Error creating thread 1");
       exit(2);
@@ -102,12 +109,14 @@ int entrance(int argc, char **argv) {
   return 0;
 }
 
-inline void generate_all_possibilities(size_t number) {
+void generate_all_possibilities(size_t number) {
   int cur_digit = PASSWORD_LENGTH - 1;
-  size_t len = TOTAL_PASSWORDS / 4;
+  size_t len = TOTAL_PASSWORDS / NUM_THREAD;
   char guess[7] = "aaaaaa";
-  size_t end = number + len;
-  for (size_t i = number; i < end; i++) {
+  size_t start = INITIAL_PASSWORD + number;
+  size_t end = start + len;
+  printf("start: %zu, end: %zu\n", start, end);
+  for (size_t i = start; i < end; i++) {
     size_t num = i;
     while (num > 0) {
       guess[cur_digit--] = num % 26 + 'a';
