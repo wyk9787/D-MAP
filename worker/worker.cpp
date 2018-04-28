@@ -11,108 +11,129 @@
 #include <arpa/inet.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <vector>
+#include <string>
+#include "../worker-server.hpp"
 
 #define PORT_NUMBER 60519
 #define WORKER_JOIN -1
 
+// The pointer to the function in the library that will be executed
 typedef int (*real_main_t)(int argc, char** argv);
-const char* shared_library = "../shared_library/d-map-injection.so";
 
+// NOTE: relative path doesn't seem to work here
+const char* shared_library = "/home/qishuyi/213/final_project/D-Map/shared_library/d-map-injection.so";
+
+/**
+ * Makes a socket and connect to another with the given address on the given port.
+ * @param server_address, a string that represents the name of the server
+ * @param port, an integer that represents the port number
+ *
+ * @returns file descriptor for the socket that is connected to server_address on port.
+ */
 int socket_connect(char * server_address, int port) {
-  // Connect to its parent using directory server
+  // Turn the server name into an IP address
   struct hostent* server = gethostbyname(server_address);
   if(server == NULL) {
     fprintf(stderr, "Unable to find host %s\n", server_address);
     return -1;
   }
-  
+
+  // Set up a socket
   int sock = socket(AF_INET, SOCK_STREAM, 0);
   if(sock == -1) {
     perror("socket failed");
     return -1;
   }
 
+  // Initialize the socket address
   struct sockaddr_in addr_client = {
     .sin_family = AF_INET,
     .sin_port = htons(port)
   };
 
+  // Fill in the address from the server variable we declared earlier
   bcopy((char*)server->h_addr, (char*)&addr_client.sin_addr.s_addr, server->h_length);
 
+  // Connect to the server
   if(connect(sock, (struct sockaddr*)&addr_client, sizeof(struct sockaddr_in))) {
     perror("connect failed in socket_connect");
     return -1;
   }
+  
   return sock;
 }
 
-
-
 int main(int argc, char** argv) {
-
-  char * func_args[3];
-  
-  // TODO: now it is passing the string "./worker", change it to sth else later
-  // TODO: Why we need to save this thing?
-  func_args[0] = argv[0];
-  int index = 1;
   if(argc != 2) {
     fprintf(stderr, "Usage: %s <server address>\n", argv[0]);
     exit(EXIT_FAILURE);
   }
-
+  
   // Connect to server
   char* server_address = argv[1];
   int server_socket = socket_connect(server_address, PORT_NUMBER);
 
-  int server_socket_copy = dup(server_socket);
-  if(server_socket_copy == -1) {
-    perror("dup failed in client_thread_fn");
-    exit(EXIT_FAILURE);
+  // Send a worker-join message to the server
+  char result[50];
+  sprintf(result, "%d\n", WORKER_JOIN);
+  write(server_socket, result, strlen(result));
+
+  // Initialize a struct to hold arguments to the function
+  task_arg_t* buffer = (task_arg_t*)malloc(sizeof(task_arg_t));
+
+  // Get the function arguments from the server
+  int bytes_read = read(server_socket, (void*)buffer, sizeof(task_arg_t));
+  if(bytes_read < 0) {
+    perror("read failed");
+    exit(2);
   }
+ 
+  // Unpack the function arguments sent from the server
+  int num_args = buffer->num_args;
+  char function_name[256];
+  strcpy(function_name, buffer->function_name);
+  char* inputs = buffer->inputs;
+  int section_num = buffer->section_num;
 
-  // Open the socket as a FILE stream so we can use fgets
-  FILE* input = fdopen(server_socket, "r");
-  FILE* output = fdopen(server_socket_copy, "w");
-  
-  // Check for errors
-  if(output == NULL || input == NULL) {
-    perror("fdopen failed in client_thread_fn");
-    exit(EXIT_FAILURE);
-  }
+  // Initialize the arguments to the program
+  char* func_args[num_args];
+  int index = 0;
 
-  fprintf(output, "%d\n", WORKER_JOIN);
+  // The first argument to the function will be the name of the function
+  func_args[0] = function_name;
+  index++;
 
-  char * line = NULL;
-  size_t linecap = 0;
-  if (getline(&line, &linecap, input) > 0) {
-    char * dup = strdup(line);
-    func_args[2] = dup;
-    index++;
-  }
-  char * pathname =  strcpy(pathname,"./client/passwords.txt");
+  // The next argument[s] are the input(s) to the function
+  // TODO: Will change it to a list of inputs
+  func_args[index] = inputs;
+  index++;
 
-  func_args[1] = pathname;
-  
+  // The last argument to the function will be the section number
+  char num[20];
+  sprintf(num, "%d", section_num);
+  func_args[index] = num;
+
   // Load the shared library (actual program resides here)
   void* injection = dlopen(shared_library, RTLD_LAZY | RTLD_GLOBAL);
   if(injection == NULL) {
-    perror("dlopen");
-    exit(1);
+    fprintf(stderr, "%s\n", dlerror());
+    exit(EXIT_FAILURE);
   }
 
   // Clear error
-  dlerror();
+  // dlerror();
+  
   // Get the entrance function
-  real_main_t real_main = (real_main_t)dlsym(injection, "entrance");
+  real_main_t real_main = (real_main_t)dlsym(injection, function_name);
   char* error = dlerror();
   if(error != NULL) {
     printf("Error: %s\n", error);
     exit(1);
   }
 
-  real_main(3, func_args);
- 
+  // Execute the program
+  real_main(num_args, func_args);
   
   //close
   close(server_socket);

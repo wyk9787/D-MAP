@@ -5,46 +5,57 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <iostream>
+#include <vector>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include "../worker-server.hpp"
 
 #define D_SERVER_PORT 60519
 #define WORKER_JOIN -1
 #define USER_JOIN -2
 
-char * function_name = NULL;
-
-
-typedef struct worker_thread_args {
-  // TODO: Complete this part
+typedef struct worker_info {
   int socket_fd;
-  int index;
+}worker_info_t;
+
+int num_of_workers;
+std::vector<worker_info_t*> list_of_workers; 
+
+// NOTE: Char* don't work here.
+typedef struct thread_args {
+  int socket_fd;
+  char function_name[256];
+  int num_args;
+  char inputs[256];  // TODO: will change it to a list of inputs in the future
+  int section_num;
 }thread_arg_t;
 
+/**
 void * user_thread_fn (void * u) {
+  // Unpack thread arguments
   thread_arg_t* args = (thread_arg_t*)u;
   int socket_fd = args->socket_fd;
+
+  // Duplicate the socket_fd so we can open it twice, once for input and once for output
   int socket_fd_copy = dup(socket_fd);
   if(socket_fd_copy == -1) {
     perror("dup failed in client_thread_fn");
     exit(EXIT_FAILURE);
   }
 
-  char * line = NULL;
-  size_t linecap = 0;
-
   // Open the socket as a FILE stream so we can use fgets
   FILE* input = fdopen(socket_fd, "r");
   FILE* output = fdopen(socket_fd_copy, "w");
-  
-  // Check for errors
   if(output == NULL || input == NULL) {
     perror("fdopen failed in client_thread_fn");
     exit(EXIT_FAILURE);
   }
 
+  char * line = NULL;
+  size_t linecap = 0;
   while (getline(&line, &linecap, input) > 0) {
     function_name = line;
   }
@@ -52,49 +63,43 @@ void * user_thread_fn (void * u) {
   close(socket_fd_copy);
   return NULL;
 }
+*/
 
 void* worker_thread_fn(void* w) {
-  // Duplicate the socket_fd so we can open it twice, once for input and once for output
+  printf("In the worker thread.\n");
+  
+  // Unpack thread arguments
   thread_arg_t* args = (thread_arg_t*)w;
   int socket_fd = args->socket_fd;
-  int index = args->index;
-  int socket_fd_copy = dup(socket_fd);
-  if(socket_fd_copy == -1) {
-    perror("dup failed in client_thread_fn");
-    exit(EXIT_FAILURE);
-  }
-
-  // Open the socket as a FILE stream so we can use fgets
-  FILE* input = fdopen(socket_fd, "r");
-  FILE* output = fdopen(socket_fd_copy, "w");
+  char* function_name = args->function_name;
+  int num_args = args->num_args;
+  int section_num = args->section_num;
+  char* inputs = args->inputs;
   
-  // Check for errors
-  if(output == NULL || input == NULL) {
-    perror("fdopen failed in client_thread_fn");
-    exit(EXIT_FAILURE);
-  }
-
-  while (function_name == NULL);
-  fprintf(output,"%d\n", index);
-  fprintf(output, "%s\n", function_name);
-  fflush(output);
-
+  // Sends the function name to the worker with its section number as string
+  // TODO: These will eventually be done in the user thread
+  task_arg_t* task_arg = (task_arg_t*)malloc(sizeof(task_arg_t));
+  task_arg->num_args = num_args;
+  strcpy(task_arg->function_name, function_name);
+  task_arg->section_num = section_num;
+  strcpy(task_arg->inputs, inputs); // TODO: will change to a list of inputs in the future
+  write(socket_fd, (void*)task_arg, sizeof(task_arg_t));
+ 
+  // Close the socket
   close(socket_fd);
-  close(socket_fd_copy);
 
-  printf("A worker joined.\n");
   return NULL;
 }
 
 int main() {
-   // Set up a socket
+  // Set up a socket
   int s = socket(AF_INET, SOCK_STREAM, 0);
   if(s == -1) {
     perror("socket");
     exit(2);
   }
 
-  // Listen at this address. We'll bind to port 0 to accept any available port
+  // Listen for any address on port 60519.
   struct sockaddr_in addr;
   addr.sin_addr.s_addr = INADDR_ANY;
   addr.sin_family = AF_INET;
@@ -109,8 +114,10 @@ int main() {
   // Become a server socket
   listen(s, 2);
 
+  // Initialize the number of workers
   int num_of_workers = 0;
-  
+
+  // Repeatedly accept client connections
   while(true) {
     // Accept a client connection
     struct sockaddr_in client_addr;
@@ -119,66 +126,54 @@ int main() {
     // Blocking call: accepts connection from a user/worker and gets its socket
     int client_socket = accept(s, (struct sockaddr*)&client_addr, &client_addr_len);
 
-    // Getting address of the client
+    // Getting IP address of the client
     char ipstr[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &client_addr.sin_addr, ipstr, INET_ADDRSTRLEN);
 
-    //printf("Client %d connected from %s\n", num_of_workers, ipstr);
-    
-    // Duplicate the socket_fd so we can open it twice, once for input and once for output
-    int client_socket_copy = dup(client_socket);
-    if(client_socket_copy == -1) {
-      perror("dup failed");
-      exit(EXIT_FAILURE);
+    char buffer[256];
+    int bytes_read = read(client_socket, buffer, 256);
+    if(bytes_read < 0) {
+      perror("read failed");
+      exit(2);
     }
-    
-    // Open the socket as a FILE stream so we can use fgets
-    FILE* input = fdopen(client_socket, "r");
-    FILE* output = fdopen(client_socket_copy, "w");
-  
-    // Check for errors
-    if(input == NULL || output == NULL) {
-      perror("fdopen failed");
-      exit(EXIT_FAILURE);
-    }
-  
-    // Read lines until we hit the end of the input (the client disconnects)
-    char* line = NULL;
-    size_t linecap = 100;
-    while (getline(&line, &linecap, input) > 0) {
-      // Get the integer at the beginning of the message
-      char* token = strtok(line, " ");
-      int sig = atoi(token);
+    // Get the integer at the beginning of the message
+    char* token = strtok(buffer, "\n");
+    int sig = atoi(token);
 
-      
-      if(sig == WORKER_JOIN) {
-        // Create the thread for worker
-        thread_arg_t* args = (thread_arg_t*)malloc(sizeof(thread_arg_t));
-        args->socket_fd = client_socket;
-        args->index = num_of_workers;
-        pthread_t thread_worker;
-        if(pthread_create(&thread_worker, NULL, worker_thread_fn, args)) {
-          perror("pthread_create failed");
-          exit(EXIT_FAILURE);
-        }
-        printf("Client %d connected from %s\n", num_of_workers, ipstr);
-        num_of_workers++;
-        
-      }else if(sig == USER_JOIN) {
-        // Create the thread for user
-        thread_arg_t* args = (thread_arg_t*)malloc(sizeof(thread_arg_t));
-        args->socket_fd = client_socket;
-        args->index = -1;
-        pthread_t thread_user;
-        if(pthread_create(&thread_user, NULL, user_thread_fn, args)) {
-          perror("pthread_create failed");
-          exit(EXIT_FAILURE);
-          }
+    // Checks if the client is a user or a worker
+    if(sig == WORKER_JOIN) {
+      // Create the thread for worker
+      thread_arg_t* args = (thread_arg_t*)malloc(sizeof(thread_arg_t));
+      args->socket_fd = client_socket;
+      strcpy(args->function_name, "entrance");
+      args->num_args = 3;
+      args->section_num = num_of_workers;
+      strcpy(args->inputs, "/home/qishuyi/213/final_project/D-Map/tests/passwords.txt");  // TODO: will change to a list of inputs in the future
+
+      pthread_t thread_worker;
+      if(pthread_create(&thread_worker, NULL, worker_thread_fn, args)) {
+        perror("pthread_create failed");
+        exit(EXIT_FAILURE);
       }
-    }
-  
-    // When we're done, we should free the line from getline
-    free(line);
+      printf("Client %d connected from %s\n", num_of_workers, ipstr);
+      num_of_workers++;
+
+      // Add worker to the list
+      worker_info_t* info = (worker_info_t*)malloc(sizeof(worker_info_t));
+      info->socket_fd = client_socket;
+      list_of_workers.push_back(info);
+    }/** else if(sig == USER_JOIN) {
+      // Create the thread for user
+      thread_arg_t* args = (thread_arg_t*)malloc(sizeof(thread_arg_t));
+      args->socket_fd = client_socket;
+      args->index = 0;
+        
+      pthread_t thread_user;
+      if(pthread_create(&thread_user, NULL, user_thread_fn, args)) {
+      perror("pthread_create failed");
+      exit(EXIT_FAILURE);
+      }
+      }*/
   
     // Print information on the server side
     printf("Worker %d disconnected.\n", num_of_workers);
