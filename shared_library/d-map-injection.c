@@ -115,7 +115,6 @@ void generate_all_possibilities(size_t number) {
   char guess[7] = "aaaaaa";
   size_t start = INITIAL_PASSWORD + number;
   size_t end = start + len;
-  printf("start: %zu, end: %zu\n", start, end);
   for (size_t i = start; i < end; i++) {
     size_t num = i;
     while (num > 0) {
