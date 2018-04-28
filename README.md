@@ -2,6 +2,13 @@
 A distributed version of map procedure that distributes task to multiple
 threads running on multiple machines
 
+## Usage
+
+* Run `make` in the root directory, it will compile each program inside of each
+directory.
+
+* Run `make` in each directory, it will compile the program in that directory
+
 # Changelog
 ## 04-24-2018
 ## ADDED
