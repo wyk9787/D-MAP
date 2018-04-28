@@ -53,12 +53,15 @@ int main(int argc, char** argv) {
   char * func_args[3];
   
   // TODO: now it is passing the string "./worker", change it to sth else later
+  // TODO: Why we need to save this thing?
   func_args[0] = argv[0];
   int index = 1;
   if(argc != 2) {
     fprintf(stderr, "Usage: %s <server address>\n", argv[0]);
     exit(EXIT_FAILURE);
   }
+
+  // Connect to server
   char* server_address = argv[1];
   int server_socket = socket_connect(server_address, PORT_NUMBER);
 
@@ -91,22 +94,24 @@ int main(int argc, char** argv) {
 
   func_args[1] = pathname;
   
-
-  errno = 0;
+  // Load the shared library (actual program resides here)
   void* injection = dlopen(shared_library, RTLD_LAZY | RTLD_GLOBAL);
   if(injection == NULL) {
     perror("dlopen");
     exit(1);
   }
-  dlerror();
-  real_main_t real_main = (real_main_t)dlsym(injection, "entrance");
 
-  real_main(3, func_args);
+  // Clear error
+  dlerror();
+  // Get the entrance function
+  real_main_t real_main = (real_main_t)dlsym(injection, "entrance");
   char* error = dlerror();
   if(error != NULL) {
     printf("Error: %s\n", error);
     exit(1);
   }
+
+  real_main(3, func_args);
  
   
   //close
