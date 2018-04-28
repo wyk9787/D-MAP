@@ -120,9 +120,6 @@ int main(int argc, char** argv) {
     fprintf(stderr, "%s\n", dlerror());
     exit(EXIT_FAILURE);
   }
-
-  // Clear error
-  // dlerror();
   
   // Get the entrance function
   real_main_t real_main = (real_main_t)dlsym(injection, function_name);
@@ -131,7 +128,13 @@ int main(int argc, char** argv) {
     printf("Error: %s\n", error);
     exit(1);
   }
-
+  
+  // Swap the server_socket in and use it as stdout 
+  if(dup2(server_socket, STDOUT_FILENO) == -1) {
+    fprintf(stderr, "Failed to set new file as output\n");
+    exit(2);
+  } 
+  
   // Execute the program
   real_main(num_args, func_args);
   

@@ -84,7 +84,20 @@ void* worker_thread_fn(void* w) {
   task_arg->section_num = section_num;
   strcpy(task_arg->inputs, inputs); // TODO: will change to a list of inputs in the future
   write(socket_fd, (void*)task_arg, sizeof(task_arg_t));
- 
+
+  // Read cracked passwords from the worker and print it to the console
+  char buffer[256];
+  int bytes_read = read(socket_fd, buffer, 256);
+  if(bytes_read < 0) {
+    perror("read failed");
+    exit(2);
+  }
+  char* token = strtok(buffer, "\n");
+  while (token != NULL) {
+    printf("%s\n", token);
+    token = strtok(NULL, "\n");
+  }
+  
   // Close the socket
   close(socket_fd);
 
