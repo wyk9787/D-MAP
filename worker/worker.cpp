@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
   FILE * exe_lib = fopen(shared_library, "wb");
   if (exe_lib == NULL) { 
     perror("Failed: ");
-    return 1;
+    exit(1);
   }
   fwrite((const void*)executable, filesize, 1, exe_lib);
   

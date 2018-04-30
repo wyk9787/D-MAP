@@ -43,21 +43,46 @@ void * user_thread_fn (void* u) {
 
   // Then get the executable file from the user (this file should be of filesize).
   char executable[filesize];
-  read(socket_fd, (void*)executable, filesize);
+  int bytes_to_read = filesize;
+  FILE * exe_lib = fopen("temp.so", "wb");
+  int prev_written = 0;
+  while(bytes_to_read > 0){
+    if (exe_lib == NULL) { 
+      perror("Failed: ");
+      exit(1);
+    }
+    int executable_read = read(socket_fd, executable + prev_written, bytes_to_read);
+    printf("Read %d bytes of executable.\n", executable_read);
+    //printf("Write %d bytes of executable.\n", bytes_written);
+    bytes_to_read -= executable_read;
+    prev_written += executable_read;
+  }
+  int items_written = fwrite(executable, filesize, 1, exe_lib);
+  if (items_written != 1){
+      
+    fprintf(stderr, "fwrite\n");
+    exit(1);
+  }
+  fclose(exe_lib);
   printf("Read executable\n");
   
   // Finally get the arguments from user
-  task_arg_user_t* task_arg_user = (task_arg_user_t*)malloc(sizeof(task_arg_user_t));
-  int bytes = read(socket_fd, (void*)task_arg_user, sizeof(task_arg_user_t));
+  task_arg_user_t task_args;
+  int bytes = read(socket_fd, &task_args, sizeof(task_arg_user_t));
+  if(bytes == -1) {
+    perror("read");
+    exit(2);
+  }
+  printf("Bytes read: %d\n", bytes);
+  
   printf("Read arguments.\n");
-
   // Unpack arguments from the user
-  int num_args = task_arg_user->num_args;
+  int num_args = task_args.num_args;
   char function_name[256];
-  strcpy(function_name, task_arg_user->function_name);
+  strcpy(function_name, task_args.function_name);
   char inputs[256];
-  strcpy(inputs, task_arg_user->inputs); // TODO: will change to a list of inputs in the future
-  printf("Read num_of_arguments: %d, read functionname: %s, read inputs: %s.\n", num_args, task_arg_user->function_name, task_arg_user->inputs);
+  strcpy(inputs, task_args.inputs); // TODO: will change to a list of inputs in the future
+  printf("Read num_of_arguments: %d, read functionname: %s, read inputs: %s.\n", num_args, function_name, inputs);
   
   std::vector<int>::iterator iter;
   int section_num = 0;
