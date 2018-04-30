@@ -80,14 +80,14 @@ int main(int argc, char** argv) {
   write(server_socket, result, strlen(result));
 
   // First get the size of the executable
-  char* executable_size;
+  char executable_size[10];
   read(server_socket, (void*)executable_size, 10);
   long filesize = strtol(executable_size, NULL, 10);
   
   // Then get the executable file and save it locally
-  char* executable;
+  char executable[filesize];
   read(server_socket, (void*)executable, filesize);
-  FILE * exe_lib = fopen(shared_library, "w");
+  FILE * exe_lib = fopen(shared_library, "wb");
   if (exe_lib == NULL) { 
     perror("Failed: ");
     return 1;
@@ -152,7 +152,7 @@ int main(int argc, char** argv) {
   } 
   
   // Execute the program
-  real_main(num_args, func_args);
+  real_main(num_args+2, func_args);
   
   //close
   close(server_socket);

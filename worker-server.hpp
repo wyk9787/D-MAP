@@ -23,7 +23,7 @@
  * 2. a list of inputs
  * 3. the worker's section number (varies from worker to worker)
  */
-typedef struct task_args_worker {
+typedef struct __attribute__((packed)) task_args_worker {
   int num_args;
   char function_name[256];
   char inputs[256];
@@ -32,7 +32,7 @@ typedef struct task_args_worker {
   int section_num;
 }task_arg_worker_t;
 
-typedef struct task_args_user {
+typedef struct __attribute__((packed)) task_args_user {
   int num_args;
   char function_name[256];
   char inputs[256];

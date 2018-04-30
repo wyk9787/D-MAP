@@ -25,30 +25,40 @@ typedef struct thread_args {
 }thread_arg_t;
 
 void * user_thread_fn (void* u) {
+  printf("In the user thread.\n");
   // Unpack thread arguments
   thread_arg_t* args = (thread_arg_t*)u;
   int socket_fd = args->socket_fd;
 
   // Read the size of the executable file first
-  char* executable_size;
-  read(socket_fd, (void*)executable_size, 10);
+  char executable_size[10];
+  if((read(socket_fd, (void*)executable_size, 10)) == -1) {
+    perror("read");
+    exit(1);
+    
+  }
+  printf("Executable size is: %s\n", executable_size);
   long filesize = strtol(executable_size, NULL, 10);
+  printf("Read size: %ld.\n", filesize);
 
   // Then get the executable file from the user (this file should be of filesize).
-  char* executable;
+  char executable[filesize];
   read(socket_fd, (void*)executable, filesize);
+  printf("Read executable\n");
   
   // Finally get the arguments from user
   task_arg_user_t* task_arg_user = (task_arg_user_t*)malloc(sizeof(task_arg_user_t));
-  read(socket_fd, (void*)task_arg_user, sizeof(task_arg_user_t));
+  int bytes = read(socket_fd, (void*)task_arg_user, sizeof(task_arg_user_t));
+  printf("Read arguments.\n");
 
   // Unpack arguments from the user
   int num_args = task_arg_user->num_args;
-  char* function_name;
+  char function_name[256];
   strcpy(function_name, task_arg_user->function_name);
-  char* inputs;
+  char inputs[256];
   strcpy(inputs, task_arg_user->inputs); // TODO: will change to a list of inputs in the future
-
+  printf("Read num_of_arguments: %d, read functionname: %s, read inputs: %s.\n", num_args, task_arg_user->function_name, task_arg_user->inputs);
+  
   std::vector<int>::iterator iter;
   int section_num = 0;
 
@@ -74,6 +84,7 @@ void * user_thread_fn (void* u) {
     
     section_num++;
   }
+  
   
   close(socket_fd);
   return NULL;
@@ -153,6 +164,7 @@ int main() {
     // Blocking call: accepts connection from a user/worker and gets its socket
     int client_socket = accept(s, (struct sockaddr*)&client_addr, &client_addr_len);
 
+    printf("Accept a connection from client.\n");
     // Getting IP address of the client
     char ipstr[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &client_addr.sin_addr, ipstr, INET_ADDRSTRLEN);
@@ -163,10 +175,12 @@ int main() {
       perror("read failed");
       exit(2);
     }
+    printf("Read the identification message.\n");
     // Get the integer at the beginning of the message
     char* token = strtok(buffer, "\n");
     int sig = atoi(token);
 
+    printf("Got message from client.\n");
     // Checks if the client is a user or a worker
     if(sig == WORKER_JOIN) {
       // Create the thread for worker
@@ -185,6 +199,7 @@ int main() {
       num_of_workers++;
     } else if(sig == USER_JOIN) {
       if(!user_exist){
+        printf("Identified a user.\n");
         // Create the thread for user
         thread_arg_t* args = (thread_arg_t*)malloc(sizeof(thread_arg_t));
         args->socket_fd = client_socket;
