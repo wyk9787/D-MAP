@@ -17,53 +17,67 @@
 #define WORKER_JOIN -1
 #define USER_JOIN -2
 
-typedef struct worker_info {
-  int socket_fd;
-}worker_info_t;
+//check if there is a user
+bool user_exist = false;
+int user_socket;
 
 int num_of_workers;
-std::vector<worker_info_t*> list_of_workers; 
+std::vector<int> list_of_workers; 
 
 // NOTE: Char* don't work here.
+/**
 typedef struct thread_args {
   int socket_fd;
   char function_name[256];
   int num_args;
   char inputs[256];  // TODO: will change it to a list of inputs in the future
   int section_num;
+}worker_thread_arg_t;
+*/
+
+typedef struct thread_args {
+  int socket_fd;
 }thread_arg_t;
 
-/**
-void * user_thread_fn (void * u) {
+
+void * user_thread_fn (void* u) {
   // Unpack thread arguments
   thread_arg_t* args = (thread_arg_t*)u;
   int socket_fd = args->socket_fd;
 
-  // Duplicate the socket_fd so we can open it twice, once for input and once for output
-  int socket_fd_copy = dup(socket_fd);
-  if(socket_fd_copy == -1) {
-    perror("dup failed in client_thread_fn");
-    exit(EXIT_FAILURE);
-  }
+  task_arg_user_t* task_arg_user = (task_arg_user_t*)malloc(sizeof(task_arg_user_t));
+  read(socket_fd, (void*)task_arg_user, sizeof(task_arg_user_t));
 
-  // Open the socket as a FILE stream so we can use fgets
-  FILE* input = fdopen(socket_fd, "r");
-  FILE* output = fdopen(socket_fd_copy, "w");
-  if(output == NULL || input == NULL) {
-    perror("fdopen failed in client_thread_fn");
-    exit(EXIT_FAILURE);
-  }
+  // Unpack arguments from the user
+  int num_args = task_arg_user->num_args;
+  char* function_name;
+  strcpy(function_name, task_arg_user->function_name);
+  char* inputs;
+  strcpy(inputs, task_arg_user->inputs); // TODO: will change to a list of inputs in the future
 
-  char * line = NULL;
-  size_t linecap = 0;
-  while (getline(&line, &linecap, input) > 0) {
-    function_name = line;
+  std::vector<int>::iterator iter;
+  int section_num = 0;
+
+  // Iterate through each worker in list_of_workers
+  for(iter = list_of_workers.begin(); iter != list_of_workers.end(); iter++) {
+    // Pack arguments for the worker
+    task_arg_worker_t* task_arg_worker = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
+    task_arg_worker->num_args = num_args;
+    strcpy(task_arg_worker->function_name, function_name);
+    strcpy(task_arg_worker->inputs, inputs);
+    task_arg_worker->section_num = section_num;
+
+    // Send the task_arg_worker_t to the worker
+    int worker_socket = *iter;
+    write(worker_socket, (void*)task_arg_worker, sizeof(task_arg_worker_t));
+    
+    section_num++;
   }
+  
   close(socket_fd);
-  close(socket_fd_copy);
   return NULL;
 }
-*/
+
 
 void* worker_thread_fn(void* w) {
   printf("In the worker thread.\n");
@@ -71,19 +85,6 @@ void* worker_thread_fn(void* w) {
   // Unpack thread arguments
   thread_arg_t* args = (thread_arg_t*)w;
   int socket_fd = args->socket_fd;
-  char* function_name = args->function_name;
-  int num_args = args->num_args;
-  int section_num = args->section_num;
-  char* inputs = args->inputs;
-  
-  // Sends the function name to the worker with its section number as string
-  // TODO: These will eventually be done in the user thread
-  task_arg_t* task_arg = (task_arg_t*)malloc(sizeof(task_arg_t));
-  task_arg->num_args = num_args;
-  strcpy(task_arg->function_name, function_name);
-  task_arg->section_num = section_num;
-  strcpy(task_arg->inputs, inputs); // TODO: will change to a list of inputs in the future
-  write(socket_fd, (void*)task_arg, sizeof(task_arg_t));
 
   // Read cracked passwords from the worker and print it to the console
   char buffer[256];
@@ -92,6 +93,17 @@ void* worker_thread_fn(void* w) {
     perror("read failed");
     exit(2);
   }
+  while ((bytes_read = read(socket_fd, buffer, 256)) > 0) {
+    perror("read failed");
+    exit(2);
+  }
+
+  // Swap the server_socket in and use it as stdout 
+  if(dup2(user_socket, STDOUT_FILENO) == -1) {
+    fprintf(stderr, "Failed to set user socket as output\n");
+    exit(2);
+  } 
+  
   char* token = strtok(buffer, "\n");
   while (token != NULL) {
     printf("%s\n", token);
@@ -158,10 +170,12 @@ int main() {
       // Create the thread for worker
       thread_arg_t* args = (thread_arg_t*)malloc(sizeof(thread_arg_t));
       args->socket_fd = client_socket;
+      /**
       strcpy(args->function_name, "entrance");
       args->num_args = 3;
       args->section_num = num_of_workers;
       strcpy(args->inputs, "/home/qishuyi/213/final_project/D-Map/tests/passwords.txt");  // TODO: will change to a list of inputs in the future
+      */
 
       pthread_t thread_worker;
       if(pthread_create(&thread_worker, NULL, worker_thread_fn, args)) {
@@ -169,24 +183,29 @@ int main() {
         exit(EXIT_FAILURE);
       }
       printf("Client %d connected from %s\n", num_of_workers, ipstr);
-      num_of_workers++;
 
       // Add worker to the list
-      worker_info_t* info = (worker_info_t*)malloc(sizeof(worker_info_t));
-      info->socket_fd = client_socket;
-      list_of_workers.push_back(info);
-    }/** else if(sig == USER_JOIN) {
-      // Create the thread for user
-      thread_arg_t* args = (thread_arg_t*)malloc(sizeof(thread_arg_t));
-      args->socket_fd = client_socket;
-      args->index = 0;
+      list_of_workers.push_back(client_socket);
+      num_of_workers++;
+    } else if(sig == USER_JOIN) {
+      if(!user_exist){
+        // Create the thread for user
+        thread_arg_t* args = (thread_arg_t*)malloc(sizeof(thread_arg_t));
+        args->socket_fd = client_socket;
+
+        // Let the server know the user socket
+        user_socket = client_socket;
         
-      pthread_t thread_user;
-      if(pthread_create(&thread_user, NULL, user_thread_fn, args)) {
-      perror("pthread_create failed");
-      exit(EXIT_FAILURE);
+        pthread_t thread_user;
+        if(pthread_create(&thread_user, NULL, user_thread_fn, args)) {
+          perror("pthread_create failed");
+          exit(EXIT_FAILURE);
+        }
+      }else{
+        char* message = (char*)"Server is busy.\n";
+        write(client_socket, message, strlen(message));
       }
-      }*/
+   }
   
     // Print information on the server side
     printf("Worker %d disconnected.\n", num_of_workers);

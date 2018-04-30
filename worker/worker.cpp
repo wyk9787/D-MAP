@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
   
   // Swap the server_socket in and use it as stdout 
   if(dup2(server_socket, STDOUT_FILENO) == -1) {
-    fprintf(stderr, "Failed to set new file as output\n");
+    fprintf(stderr, "Failed to set server socket as output\n");
     exit(2);
   } 
   
