@@ -13,10 +13,6 @@
 #include <arpa/inet.h>
 #include "../worker-server.hpp"
 
-#define D_SERVER_PORT 60519
-#define WORKER_JOIN -1
-#define USER_JOIN -2
-
 //check if there is a user
 bool user_exist = false;
 int user_socket;
@@ -24,27 +20,25 @@ int user_socket;
 int num_of_workers;
 std::vector<int> list_of_workers; 
 
-// NOTE: Char* don't work here.
-/**
-typedef struct thread_args {
-  int socket_fd;
-  char function_name[256];
-  int num_args;
-  char inputs[256];  // TODO: will change it to a list of inputs in the future
-  int section_num;
-}worker_thread_arg_t;
-*/
-
 typedef struct thread_args {
   int socket_fd;
 }thread_arg_t;
-
 
 void * user_thread_fn (void* u) {
   // Unpack thread arguments
   thread_arg_t* args = (thread_arg_t*)u;
   int socket_fd = args->socket_fd;
 
+  // Read the size of the executable file first
+  char* executable_size;
+  read(socket_fd, (void*)executable_size, 10);
+  long filesize = strtol(executable_size, NULL, 10);
+
+  // Then get the executable file from the user (this file should be of filesize).
+  char* executable;
+  read(socket_fd, (void*)executable, filesize);
+  
+  // Finally get the arguments from user
   task_arg_user_t* task_arg_user = (task_arg_user_t*)malloc(sizeof(task_arg_user_t));
   read(socket_fd, (void*)task_arg_user, sizeof(task_arg_user_t));
 
@@ -60,6 +54,14 @@ void * user_thread_fn (void* u) {
 
   // Iterate through each worker in list_of_workers
   for(iter = list_of_workers.begin(); iter != list_of_workers.end(); iter++) {
+    int worker_socket = *iter;
+
+    //First send the size of the executable file
+    write(worker_socket, (void*)executable_size, 10);
+    
+    // Send the executable file to the worker
+    write(worker_socket, (void*)executable, filesize);
+    
     // Pack arguments for the worker
     task_arg_worker_t* task_arg_worker = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
     task_arg_worker->num_args = num_args;
@@ -68,7 +70,6 @@ void * user_thread_fn (void* u) {
     task_arg_worker->section_num = section_num;
 
     // Send the task_arg_worker_t to the worker
-    int worker_socket = *iter;
     write(worker_socket, (void*)task_arg_worker, sizeof(task_arg_worker_t));
     
     section_num++;
@@ -84,34 +85,35 @@ void* worker_thread_fn(void* w) {
   
   // Unpack thread arguments
   thread_arg_t* args = (thread_arg_t*)w;
-  int socket_fd = args->socket_fd;
+  int worker_socket = args->socket_fd;
 
   // Read cracked passwords from the worker and print it to the console
   char buffer[256];
-  int bytes_read = read(socket_fd, buffer, 256);
+  int bytes_read;
+
+  // Swap the user_socket in and use it as stdout 
+  if(dup2(user_socket, STDOUT_FILENO) == -1) {
+    fprintf(stderr, "Failed to set user socket as output\n");
+    exit(2);
+  }
+
+  // Continuously reading from the worker_socket to get output
+  while ((bytes_read = read(worker_socket, buffer, 256)) > 0) {
+    char* token = strtok(buffer, "\n");
+    while (token != NULL) {
+      printf("%s\n", token);
+      token = strtok(NULL, "\n");
+    }
+  }
+
+  // Check for error
   if(bytes_read < 0) {
     perror("read failed");
     exit(2);
   }
-  while ((bytes_read = read(socket_fd, buffer, 256)) > 0) {
-    perror("read failed");
-    exit(2);
-  }
-
-  // Swap the server_socket in and use it as stdout 
-  if(dup2(user_socket, STDOUT_FILENO) == -1) {
-    fprintf(stderr, "Failed to set user socket as output\n");
-    exit(2);
-  } 
-  
-  char* token = strtok(buffer, "\n");
-  while (token != NULL) {
-    printf("%s\n", token);
-    token = strtok(NULL, "\n");
-  }
   
   // Close the socket
-  close(socket_fd);
+  close(worker_socket);
 
   return NULL;
 }
@@ -170,12 +172,6 @@ int main() {
       // Create the thread for worker
       thread_arg_t* args = (thread_arg_t*)malloc(sizeof(thread_arg_t));
       args->socket_fd = client_socket;
-      /**
-      strcpy(args->function_name, "entrance");
-      args->num_args = 3;
-      args->section_num = num_of_workers;
-      strcpy(args->inputs, "/home/qishuyi/213/final_project/D-Map/tests/passwords.txt");  // TODO: will change to a list of inputs in the future
-      */
 
       pthread_t thread_worker;
       if(pthread_create(&thread_worker, NULL, worker_thread_fn, args)) {

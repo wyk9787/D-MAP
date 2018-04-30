@@ -22,7 +22,7 @@
 typedef int (*real_main_t)(int argc, char** argv);
 
 // NOTE: relative path doesn't seem to work here
-const char* shared_library = "/home/qishuyi/213/final_project/D-Map/shared_library/d-map-injection.so";
+const char* shared_library = "/home/qishuyi/213/final_project/D-Map/shared_library/d-map-injection-temp.so";
 
 /**
  * Makes a socket and connect to another with the given address on the given port.
@@ -79,11 +79,26 @@ int main(int argc, char** argv) {
   sprintf(result, "%d\n", WORKER_JOIN);
   write(server_socket, result, strlen(result));
 
+  // First get the size of the executable
+  char* executable_size;
+  read(server_socket, (void*)executable_size, 10);
+  long filesize = strtol(executable_size, NULL, 10);
+  
+  // Then get the executable file and save it locally
+  char* executable;
+  read(server_socket, (void*)executable, filesize);
+  FILE * exe_lib = fopen(shared_library, "w");
+  if (exe_lib == NULL) { 
+    perror("Failed: ");
+    return 1;
+  }
+  fwrite((const void*)executable, filesize, 1, exe_lib);
+  
   // Initialize a struct to hold arguments to the function
-  task_arg_t* buffer = (task_arg_t*)malloc(sizeof(task_arg_t));
+  task_arg_worker_t* buffer = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
 
   // Get the function arguments from the server
-  int bytes_read = read(server_socket, (void*)buffer, sizeof(task_arg_t));
+  int bytes_read = read(server_socket, (void*)buffer, sizeof(task_arg_worker_t));
   if(bytes_read < 0) {
     perror("read failed");
     exit(2);
@@ -93,7 +108,8 @@ int main(int argc, char** argv) {
   int num_args = buffer->num_args;
   char function_name[256];
   strcpy(function_name, buffer->function_name);
-  char* inputs = buffer->inputs;
+  char inputs[256];
+  strcpy(inputs, buffer->inputs);
   int section_num = buffer->section_num;
 
   // Initialize the arguments to the program
