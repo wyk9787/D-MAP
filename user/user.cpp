@@ -73,33 +73,33 @@ int main(int argc, char** argv) {
     fprintf(stderr, "getline() failed\n");
     exit(EXIT_FAILURE);   
   }
+  program_path[strlen(program_path)-1] = '\0';
 
-  printf("Please enter all the command line arguments for each program\n");
-  printf("Enter 'NULL' when you are done.\n");
-
-
+  printf("Please enter the function name:\n");
   char* function_name = NULL;
   size_t function_name_len;
   if (getline(&function_name, &function_name_len, stdin) == -1) {
     fprintf(stderr, "getline() failed\n");
     exit(EXIT_FAILURE);   
   }
+  function_name[strlen(function_name)-1] = '\0';
     
-
-  int num_commands = 0;
   char* line = NULL;
   size_t line_size;
   
+  printf("Please enter all the command line arguments for each program\n");
+  printf("Enter 'NULL' when you are done.\n");
   if (getline(&line, &line_size, stdin) == -1) {
     fprintf(stderr, "getline() failed\n");
     exit(EXIT_FAILURE);   
   }
+  line[strlen(line)-1] = '\0';
 
   char commands[MAX_NUM_COMMAND][MAX_COMMAND_WIDTH];
   int num_args = 0; // Index for the commands
-  while(strcmp(line, "NULL\n") != 0) { // Still have more commands
+  while(strcmp(line, "NULL") != 0) { // Still have more commands
     // We need to get rid of the newline character
-    strncpy(commands[num_args], line, strlen(line)-1); 
+    strncpy(commands[num_args], line, strlen(line)); 
     printf("line: %s\n", commands[num_args]);
     num_args++;
 
@@ -109,6 +109,7 @@ int main(int argc, char** argv) {
       fprintf(stderr, "getline() failed\n");
       exit(EXIT_FAILURE);   
     }
+    line[strlen(line)-1] = '\0';
   }
 
   // Open the exectuable file
@@ -133,26 +134,32 @@ int main(int argc, char** argv) {
 
   char size_message[10];
   sprintf(size_message, "%ld", filelen);
+  printf("size len: %s\n", size_message);
   if(write(server_socket, size_message, 10) == -1) {
     perror("write");
     exit(EXIT_FAILURE);
   }
-  
-  if(write(server_socket, buffer, filelen) == -1) {
+ 
+  int write_bytes;
+  write_bytes = write(server_socket, buffer, filelen); 
+  if(write_bytes== -1) {
     perror("write");
     exit(EXIT_FAILURE);
   }
+  printf("Write %d bytes\n", write_bytes);
 
   task_arg_user_t args = {
-    .num_args = num_args - 1 // Subtract "NULL" 
+    .num_args = num_args 
   };
   strncpy(args.function_name, function_name, strlen(function_name));
   strncpy(args.inputs, commands[0], strlen(commands[0]));
 
+  printf("num_args: %d, function_name: %s, inputs: %s\n", args.num_args, args.function_name, args.inputs);
   if(write(server_socket, &args, sizeof(task_arg_user_t)) == -1) {
     perror("write");
     exit(EXIT_FAILURE);
   }
+  sleep(3);
 
   return 0;
 }
