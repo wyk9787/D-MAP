@@ -168,6 +168,9 @@ int main(int argc, char** argv) {
   char print_buffer[256];
   int ret = read(server_socket, print_buffer, 255);
   while(ret > 0) {
+    if(strcmp(print_buffer, "done") == 0) {
+       break;
+    }
     printf("%s", print_buffer);  
     int ret = read(server_socket, print_buffer, 255);
   }
