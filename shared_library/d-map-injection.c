@@ -164,7 +164,7 @@ password_entry_t *read_password_file(const char *filename) {
   // Open the password file
   FILE *password_file = fopen(filename, "r");
   if (password_file == NULL) {
-    perror("opening password file");
+    fprintf(stderr, "opening password file: %s\n", filename);
     exit(2);
   }
 

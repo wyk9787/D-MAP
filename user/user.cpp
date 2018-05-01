@@ -169,7 +169,9 @@ int main(int argc, char** argv) {
   int ret = read(server_socket, print_buffer, 255);
   while(ret > 0) {
     printf("%s", print_buffer);  
+    int ret = read(server_socket, print_buffer, 255);
   }
+  printf("Finish reading\n");
 
   // Error checking
   if(ret < 0) {
