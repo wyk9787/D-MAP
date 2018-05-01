@@ -125,12 +125,6 @@ void * user_thread_fn (void* u) {
     printf("In the user_thread, done_workers size is: %zu\n", done_workers.size());
     sleep(3);
   }
-
-  char message[5] = "done";
-  if (write(socket_fd, message, strlen(message)) < 0){
-    perror("Write");
-    exit(2);
-  }
   
   done_workers.clear();
   if (close(socket_fd) < 0){
@@ -138,8 +132,6 @@ void * user_thread_fn (void* u) {
     exit(2);
   }
   printf("Got all the done workers.\n");
-  // When we are done, close the user's file descriptor.
-  // close(socket_fd);
   return NULL;
 }
 

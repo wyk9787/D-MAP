@@ -163,24 +163,15 @@ int main(int argc, char** argv) {
     perror("write");
     exit(EXIT_FAILURE);
   }
-
+  
+  
   // Reading program's output
   char print_buffer[256];
-  int ret = read(server_socket, print_buffer, 255);
-  while(ret > 0) {
-    if(strcmp(print_buffer, "done") == 0) {
-       break;
-    }
-    printf("%s", print_buffer);  
-    int ret = read(server_socket, print_buffer, 255);
+  int ret;
+  while((ret = read(server_socket, print_buffer, 255)) > 0) {
+    printf("%s", print_buffer);
   }
   printf("Finish reading\n");
-
-  // Error checking
-  if(ret < 0) {
-    perror("read");
-    exit(EXIT_FAILURE);
-  }
 
   return 0;
 }
