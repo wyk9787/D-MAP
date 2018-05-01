@@ -11,7 +11,7 @@
 
 typedef int (*real_main_t)(int argc, char** argv);
 
-const char* shared_library = "../shared_library/d-map-injection.so";
+const char* shared_library = "../worker/injection.so";
 const char* test_file = "test.txt";
 
 int main(int argc, char** argv) {

@@ -13,6 +13,7 @@
 #include <arpa/inet.h>
 #include "../worker-server.hpp"
 
+
 //check if there is a user
 bool user_exist = false;
 int user_socket;
@@ -115,7 +116,7 @@ void * user_thread_fn (void* u) {
   }
   
   // When we are done, close the user's file descriptor.
-  close(socket_fd);
+  // close(socket_fd);
   return NULL;
 }
 
@@ -129,21 +130,15 @@ void* worker_thread_fn(void* w) {
 
   // Read cracked passwords from the worker and print it to the console
   char buffer[256];
-  int bytes_read;
-
-  // Swap the user_socket in and use it as stdout 
-  if(dup2(user_socket, STDOUT_FILENO) == -1) {
-    fprintf(stderr, "Failed to set user socket as output\n");
-    exit(2);
-  }
-
+  int bytes_read = read(worker_socket, buffer, 256);
+    
   // Continuously reading from the worker_socket to get output
-  while ((bytes_read = read(worker_socket, buffer, 256)) > 0) {
-    char* token = strtok(buffer, "\n");
-    while (token != NULL) {
-      printf("%s\n", token);
-      token = strtok(NULL, "\n");
+  while (bytes_read > 0) {
+    if(write(user_socket, buffer, 256) < 0) {
+      perror("write");
+      exit(2);
     }
+    bytes_read = read(worker_socket, buffer, 256);
   }
 
   // Check for error
@@ -183,7 +178,6 @@ int main() {
 
   // Initialize the number of workers
   int num_of_workers = 0;
-
   // Repeatedly accept client connections
   while(true) {
     // Accept a client connection
@@ -235,7 +229,7 @@ int main() {
 
         // Let the server know the user socket
         user_socket = client_socket;
-        
+        printf("In main, user_socket: %d\n", user_socket);
         pthread_t thread_user;
         if(pthread_create(&thread_user, NULL, user_thread_fn, args)) {
           perror("pthread_create failed");

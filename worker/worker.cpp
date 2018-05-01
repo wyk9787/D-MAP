@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <pthread.h>
@@ -22,7 +23,7 @@
 typedef int (*real_main_t)(int argc, char** argv);
 
 // NOTE: relative path doesn't seem to work here
-const char* shared_library = "../shared_library/d-map-injection-temp.so";
+const char* shared_library = "./injection.so";
 
 /**
  * Makes a socket and connect to another with the given address on the given port.
@@ -108,12 +109,19 @@ int main(int argc, char** argv) {
     fprintf(stderr, "fwrite\n");
     exit(1);
   }
+
+  fclose(exe_lib);
+  
+  if(chmod(shared_library, S_IRUSR | S_IWUSR | S_IXUSR | S_IXGRP | S_IRGRP | S_IWGRP | S_IXOTH | S_IROTH | S_IWOTH) != 0) {
+    perror("chmod");
+    exit(2);
+  }
   
   // Get function arguments from the server
   task_arg_worker_t* buffer = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
   int bytes_read = read(server_socket, (void*)buffer, sizeof(task_arg_worker_t));
   if(bytes_read < sizeof(task_arg_worker_t)) {
-    fprintf(stderr, "Read: Not reading enough bytes. Expected: %lu; Actual: %d", sizeof(task_arg_worker_t), bytes_read);
+    fprintf(stderr,"Read: Not reading enough bytes. Expected: %lu; Actual: %d", sizeof(task_arg_worker_t), bytes_read);
     exit(2);
   }
  
@@ -143,10 +151,11 @@ int main(int argc, char** argv) {
   sprintf(num, "%d", section_num);
   func_args[index] = num;
 
+  errno = 0;
   // Load the shared library (actual program resides here)
   void* injection = dlopen(shared_library, RTLD_LAZY | RTLD_GLOBAL);
   if(injection == NULL) {
-    fprintf(stderr, "%s\n", dlerror());
+    fprintf(stderr, "dlopen: %s\n", dlerror());
     exit(EXIT_FAILURE);
   }
   
@@ -157,6 +166,8 @@ int main(int argc, char** argv) {
     printf("Error: %s\n", error);
     exit(1);
   }
+  
+  // dlclose(injection);
   
   // Swap the server_socket in and use it as stdout 
   if(dup2(server_socket, STDOUT_FILENO) == -1) {

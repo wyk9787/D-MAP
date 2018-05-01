@@ -1,8 +1,4 @@
 Write to file test!
-start: 57921708, end: 77228944
-start: 38614472, end: 57921708
-start: 19307236, end: 38614472
-start: 0, end: 19307236
 kington divest
 vostinar cached
 klinge chmcls
