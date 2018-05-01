@@ -22,7 +22,7 @@
 typedef int (*real_main_t)(int argc, char** argv);
 
 // NOTE: relative path doesn't seem to work here
-const char* shared_library = "/home/qishuyi/213/final_project/D-Map/shared_library/d-map-injection-temp.so";
+const char* shared_library = "../shared_library/d-map-injection-temp.so";
 
 /**
  * Makes a socket and connect to another with the given address on the given port.
@@ -86,21 +86,34 @@ int main(int argc, char** argv) {
   
   // Then get the executable file and save it locally
   char executable[filesize];
-  read(server_socket, (void*)executable, filesize);
+  int bytes_to_read = filesize;
+  int prev_read = 0;
+
+  // Open a temp file in the "write-binary" mode.
   FILE * exe_lib = fopen(shared_library, "wb");
   if (exe_lib == NULL) { 
     perror("Failed: ");
     exit(1);
   }
-  fwrite((const void*)executable, filesize, 1, exe_lib);
-  
-  // Initialize a struct to hold arguments to the function
-  task_arg_worker_t* buffer = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
 
-  // Get the function arguments from the server
+  // Keep reading bytes until the entire file is read.
+  while (bytes_to_read > 0) {
+    int executable_read = read(server_socket, (void*)executable, filesize);
+    bytes_to_read -= executable_read;
+    prev_read += executable_read;
+  }
+  
+  // Write the read bytes to the file.
+  if (fwrite(executable, filesize, 1, exe_lib) != 1){
+    fprintf(stderr, "fwrite\n");
+    exit(1);
+  }
+  
+  // Get function arguments from the server
+  task_arg_worker_t* buffer = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
   int bytes_read = read(server_socket, (void*)buffer, sizeof(task_arg_worker_t));
-  if(bytes_read < 0) {
-    perror("read failed");
+  if(bytes_read < sizeof(task_arg_worker_t)) {
+    fprintf(stderr, "Read: Not reading enough bytes. Expected: %lu; Actual: %d", sizeof(task_arg_worker_t), bytes_read);
     exit(2);
   }
  

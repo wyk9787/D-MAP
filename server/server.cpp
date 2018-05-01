@@ -30,7 +30,7 @@ void * user_thread_fn (void* u) {
   thread_arg_t* args = (thread_arg_t*)u;
   int socket_fd = args->socket_fd;
 
-  // Read the size of the executable file first
+  // 1.Read the size of the executable file first. The number will be sent as a 10-byte string.
   char executable_size[10];
   if((read(socket_fd, (void*)executable_size, 10)) == -1) {
     perror("read");
@@ -41,41 +41,44 @@ void * user_thread_fn (void* u) {
   long filesize = strtol(executable_size, NULL, 10);
   printf("Read size: %ld.\n", filesize);
 
-  // Then get the executable file from the user (this file should be of filesize).
+  // 2.Then get the executable file from the user (this file should be of filesize).
   char executable[filesize];
   int bytes_to_read = filesize;
+  int prev_read = 0;
+
+  // Open a temp file in the "write-binary" mode.
   FILE * exe_lib = fopen("temp.so", "wb");
-  int prev_written = 0;
-  while(bytes_to_read > 0){
-    if (exe_lib == NULL) { 
-      perror("Failed: ");
-      exit(1);
-    }
-    int executable_read = read(socket_fd, executable + prev_written, bytes_to_read);
-    printf("Read %d bytes of executable.\n", executable_read);
-    //printf("Write %d bytes of executable.\n", bytes_written);
-    bytes_to_read -= executable_read;
-    prev_written += executable_read;
+  if(exe_lib == NULL) { 
+    perror("Failed: ");
+    exit(1);
   }
-  int items_written = fwrite(executable, filesize, 1, exe_lib);
-  if (items_written != 1){
-      
+
+  // Keep reading bytes until the entire file is read.
+  while(bytes_to_read > 0){
+    // Executable_read indicates the bytes already read by the read function.
+    int executable_read = read(socket_fd, executable + prev_read, bytes_to_read);
+    printf("Read %d bytes of executable.\n", executable_read);
+    bytes_to_read -= executable_read;
+    prev_read += executable_read;
+  }
+
+  // Write the read bytes to the file.
+  if (fwrite(executable, filesize, 1, exe_lib) != 1){
     fprintf(stderr, "fwrite\n");
     exit(1);
   }
+
+  // Close file stream.
   fclose(exe_lib);
-  printf("Read executable\n");
   
-  // Finally get the arguments from user
+  // 3.Finally get the arguments from user.
   task_arg_user_t task_args;
   int bytes = read(socket_fd, &task_args, sizeof(task_arg_user_t));
-  if(bytes == -1) {
-    perror("read");
+  if(bytes != sizeof(task_arg_user_t)) {
+    fprintf(stderr, "Read: Not reading enough bytes. Expected: %lu; Actual: %d.\n", sizeof(task_arg_user_t), bytes);
     exit(2);
   }
-  printf("Bytes read: %d\n", bytes);
   
-  printf("Read arguments.\n");
   // Unpack arguments from the user
   int num_args = task_args.num_args;
   char function_name[256];
@@ -83,7 +86,8 @@ void * user_thread_fn (void* u) {
   char inputs[256];
   strcpy(inputs, task_args.inputs); // TODO: will change to a list of inputs in the future
   printf("Read num_of_arguments: %d, read functionname: %s, read inputs: %s.\n", num_args, function_name, inputs);
-  
+
+  // Initialize an iterator on the list of workers.
   std::vector<int>::iterator iter;
   int section_num = 0;
 
@@ -110,7 +114,7 @@ void * user_thread_fn (void* u) {
     section_num++;
   }
   
-  
+  // When we are done, close the user's file descriptor.
   close(socket_fd);
   return NULL;
 }
