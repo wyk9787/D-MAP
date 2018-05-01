@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <unordered_map>
 #include "../worker-server.hpp"
 
 
@@ -19,7 +20,8 @@ bool user_exist = false;
 int user_socket;
 
 int num_of_workers;
-std::vector<int> list_of_workers; 
+std::unordered_map<int, bool> list_of_workers;
+std::vector<int> done_workers;
 
 typedef struct thread_args {
   int socket_fd;
@@ -88,14 +90,17 @@ void * user_thread_fn (void* u) {
   strcpy(inputs, task_args.inputs); // TODO: will change to a list of inputs in the future
   printf("Read num_of_arguments: %d, read functionname: %s, read inputs: %s.\n", num_args, function_name, inputs);
 
-  // Initialize an iterator on the list of workers.
-  std::vector<int>::iterator iter;
   int section_num = 0;
 
-  // Iterate through each worker in list_of_workers
-  for(iter = list_of_workers.begin(); iter != list_of_workers.end(); iter++) {
-    int worker_socket = *iter;
-
+  for(auto cur : list_of_workers) {
+    int worker_socket;
+    // Check if the worker is free. If so, give it a task; otherwise, skip it.
+    if(cur.second) {
+      worker_socket = cur.first;
+    } else {
+      continue;
+    }
+    
     //First send the size of the executable file
     write(worker_socket, (void*)executable_size, 10);
     
@@ -114,7 +119,25 @@ void * user_thread_fn (void* u) {
     
     section_num++;
   }
+
+  printf("After iterating through the list of workers.\n");
+  while(done_workers.size() != 4){
+    printf("In the user_thread, done_workers size is: %zu\n", done_workers.size());
+    sleep(3);
+  }
+
+  char message[5] = "done";
+  if (write(socket_fd, message, strlen(message)) < 0){
+    perror("Write");
+    exit(2);
+  }
   
+  done_workers.clear();
+  if (close(socket_fd) < 0){
+    perror("Close in user thread");
+    exit(2);
+  }
+  printf("Got all the done workers.\n");
   // When we are done, close the user's file descriptor.
   // close(socket_fd);
   return NULL;
@@ -139,6 +162,7 @@ void* worker_thread_fn(void* w) {
       exit(2);
     }
     bytes_read = read(worker_socket, buffer, 256);
+    printf("Bytes read: %d\n", bytes_read);
   }
 
   // Check for error
@@ -146,9 +170,17 @@ void* worker_thread_fn(void* w) {
     perror("read failed");
     exit(2);
   }
+
+  list_of_workers[worker_socket] = false;
+  done_workers.push_back(worker_socket);
+  printf("Size of done_workers is: %zu\n", done_workers.size());
+  printf("Added the workers that are done.\n");
   
   // Close the socket
-  close(worker_socket);
+  if (close(worker_socket) < 0){
+    perror("Close in worker thread");
+    exit(2);
+  }
 
   return NULL;
 }
@@ -218,7 +250,7 @@ int main() {
       printf("Client %d connected from %s\n", num_of_workers, ipstr);
 
       // Add worker to the list
-      list_of_workers.push_back(client_socket);
+      list_of_workers.insert({client_socket, true});
       num_of_workers++;
     } else if(sig == USER_JOIN) {
       if(!user_exist){

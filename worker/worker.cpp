@@ -177,8 +177,17 @@ int main(int argc, char** argv) {
   
   // Execute the program
   real_main(num_args+2, func_args);
+
+  // Swap the server_socket in and use it as stdout
+  if(dup2(STDOUT_FILENO, server_socket) == -1) {
+    fprintf(stderr, "Failed to set server socket as output\n");
+    exit(2);
+  }
   
   //close
-  close(server_socket);
+  if (close(server_socket) < 0) {
+    perror("Close in worker");
+    exit(2);
+  }
   //end
 }
