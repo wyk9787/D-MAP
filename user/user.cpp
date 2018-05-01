@@ -49,6 +49,7 @@ int socket_connect(char* server_address, int port) {
   char join[5];
   sprintf(join, "%d", USER_JOIN);
 
+  // Send join message
   if(write(sock, join, strlen(join)) == -1) {
     perror("write");
     exit(EXIT_FAILURE);
@@ -132,6 +133,7 @@ int main(int argc, char** argv) {
   fread(buffer, filelen, 1, exec_file); // Read in the entire file
   fclose(exec_file); // Close the file
 
+  // Send file size
   char size_message[10];
   sprintf(size_message, "%ld", filelen);
   printf("size len: %s\n", size_message);
@@ -140,6 +142,7 @@ int main(int argc, char** argv) {
     exit(EXIT_FAILURE);
   }
  
+  // Send actual file (exectuable)
   int write_bytes;
   write_bytes = write(server_socket, buffer, filelen); 
   if(write_bytes== -1) {
@@ -148,6 +151,7 @@ int main(int argc, char** argv) {
   }
   printf("Write %d bytes\n", write_bytes);
 
+  // Send arguments
   task_arg_user_t args = {
     .num_args = num_args 
   };
@@ -159,7 +163,19 @@ int main(int argc, char** argv) {
     perror("write");
     exit(EXIT_FAILURE);
   }
-  sleep(3);
+
+  // Reading program's output
+  char print_buffer[256];
+  int ret = read(server_socket, print_buffer, 255);
+  while(ret > 0) {
+    printf("%s", print_buffer);  
+  }
+
+  // Error checking
+  if(ret < 0) {
+    perror("read");
+    exit(EXIT_FAILURE);
+  }
 
   return 0;
 }
