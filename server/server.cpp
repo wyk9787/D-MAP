@@ -153,8 +153,9 @@ void* worker_thread_fn(void* w) {
       perror("write");
       exit(2);
     }
+    printf("bytes_read: %d\n", bytes_read);
+    buffer[bytes_read] = '\0';
     bytes_read = read(worker_socket, buffer, 256);
-    printf("Bytes read: %d\n", bytes_read);
   }
 
   // Check for error

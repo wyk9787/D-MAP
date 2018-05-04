@@ -32,17 +32,17 @@ int main(int argc, char** argv) {
   // Open the test file
   // TODO: When we actually use this, the socket that connects the server is
   // this new_output
-  int new_output = open(test_file, O_WRONLY);
-  if(new_output == -1) {
-    fprintf(stderr, "Failed to open output file %s\n", test_file);
-    exit(1);
-  }
+  //int new_output = open(test_file, O_WRONLY);
+  //if(new_output == -1) {
+  //  fprintf(stderr, "Failed to open output file %s\n", test_file);
+  //  exit(1);
+  //}
 
   // Now swap this file in and use it as stdout 
-  if(dup2(new_output, STDOUT_FILENO) == -1) {
-    fprintf(stderr, "Failed to set new file as output\n");
-    exit(2);
-  } 
+  //if(dup2(new_output, STDOUT_FILENO) == -1) {
+  //  fprintf(stderr, "Failed to set new file as output\n");
+  //  exit(2);
+  //} 
 
   printf("Write to file test!\n");
 
