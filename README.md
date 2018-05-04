@@ -7,13 +7,25 @@ threads running on multiple machines
 * Run `make` in the root directory, it will compile each program inside of each
 directory.
 
-* Run `make` in each directory, it will compile the program in that directory
+### User
 
-# Changelog
-## 04-24-2018
-## ADDED
-  - A server program that accepts connection from worker programs and makes a thread to talk to each of them.
-  - A worker program that conencts to the server.  
-  
+1. `cd src/user/`
+2. `./user <server_adress>`
+3. Answering the prompts by entering the request information.
+4. The user program will send information to server and will wait for output of the
+   program sent back.
+
+### Server
+
+1. `cd src/server`
+2. `./server`
+3. The server will then start listening for connection from both workers and
+   user
+
+### Worker
+
+1. `cd src/worker`
+2. `./worker <server_address>`
+3. The worker will then connect to the server and then wait for jobs
 
 
