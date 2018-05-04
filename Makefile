@@ -1,5 +1,5 @@
 ROOT = .
-DIRS = user shared_library tests server worker
+DIRS = tests src/user src/shared_library src/server src/worker
 LIBS = pthread dl
 
 include $(ROOT)/common.mk

@@ -13,7 +13,7 @@
 #include <errno.h>
 #include <vector>
 #include <string>
-#include "../worker-server.hpp"
+#include "worker-server.hpp"
 
 #define MAX_COMMAND_WIDTH 100
 #define MAX_NUM_COMMAND 100

@@ -4,7 +4,7 @@ CXX := clang++
 
 # Default flags
 CFLAGS   ?= -g -O2 -fPIC
-CXXFLAGS ?= $(CFLAGS) -std=c++11 
+CXXFLAGS ?= $(CFLAGS) -std=c++11 -I../../include/
 LDFLAGS  += $(addprefix -l,$(LIBS))
 
 # Default source and object files

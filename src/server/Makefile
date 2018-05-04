@@ -1,4 +1,4 @@
-ROOT = ..
+ROOT = ../../
 TARGETS = server
 LIBS = pthread dl
 

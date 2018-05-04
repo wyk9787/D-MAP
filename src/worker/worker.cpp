@@ -14,7 +14,7 @@
 #include <errno.h>
 #include <vector>
 #include <string>
-#include "../worker-server.hpp"
+#include "worker-server.hpp"
 
 #define PORT_NUMBER 60519
 #define WORKER_JOIN -1
