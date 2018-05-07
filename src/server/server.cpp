@@ -14,14 +14,16 @@
 #include <unordered_map>
 #include "worker-server.hpp"
 
+// define function pointers 
+using has_next_t = bool  (*)(void);
+using get_next_t = char* (*)(void);
 
-//check if there is a user
+// check if there is a user
 bool user_exist = false;
 int user_socket;
 
 int num_of_workers;
 std::unordered_map<int, bool> list_of_workers;
-std::vector<int> done_workers;
 
 typedef struct thread_args {
   int socket_fd;
@@ -38,7 +40,6 @@ void * user_thread_fn (void* u) {
   if((read(socket_fd, (void*)executable_size, 10)) == -1) {
     perror("read");
     exit(1);
-    
   }
   printf("Executable size is: %s\n", executable_size);
   long filesize = strtol(executable_size, NULL, 10);
@@ -90,15 +91,46 @@ void * user_thread_fn (void* u) {
   strcpy(inputs, task_args.inputs); // TODO: will change to a list of inputs in the future
   printf("Read num_of_arguments: %d, read functionname: %s, read inputs: %s.\n", num_args, function_name, inputs);
 
-  int section_num = 0;
+  // Load the shared library
+  void* program = dlopen("temp.so", RTLD_LAZY | RTLD_GLOBAL);
+  if(program == NULL) {
+    fprintf(stderr, "dlopen: %s\n", dlerror());
+    exit(EXIT_FAILURE);
+  }
+  // Get the iterator functions
+  dlerror();
+  has_next_t has_next = (has_next_t)dlsym(program, "has_next");
+  char* error = dlerror();
+  if(error != NULL) {
+    printf("has_next error: %s\n", error);
+    exit(1);
+  }
 
-  for(auto cur : list_of_workers) {
+  dlerror();
+  get_next_t get_next = (get_next_t)dlsym(program, "get_next");
+  if(error != NULL) {
+    printf("get_next error: %s\n", error);
+    exit(1);
+  }
+  
+  int section_num = 0;
+  int list_size = list_of_workers.size();
+  
+  while(has_next()) {
+    printf("Inside of has_next\n");
     int worker_socket;
     // Check if the worker is free. If so, give it a task; otherwise, skip it.
-    if(cur.second) {
-      worker_socket = cur.first;
-    } else {
-      continue;
+    bool found = false;
+    while(true) {
+      for(auto cur : list_of_workers) {
+        if(cur.second) { // This worker is available
+          list_of_workers[cur.first] = false;
+          worker_socket = cur.first;
+          found = true;
+          break;
+        }
+      }
+      if(found) break; // If we found an avaialble worker, break from the while loop
     }
     
     //First send the size of the executable file
@@ -112,21 +144,12 @@ void * user_thread_fn (void* u) {
     task_arg_worker->num_args = num_args;
     strcpy(task_arg_worker->function_name, function_name);
     strcpy(task_arg_worker->inputs, inputs);
-    task_arg_worker->section_num = section_num;
+    strcpy(task_arg_worker->chunk, get_next());
 
     // Send the task_arg_worker_t to the worker
     write(worker_socket, (void*)task_arg_worker, sizeof(task_arg_worker_t));
-    
-    section_num++;
   }
 
-  printf("After iterating through the list of workers.\n");
-  while(done_workers.size() != 4){
-    printf("In the user_thread, done_workers size is: %zu\n", done_workers.size());
-    sleep(3);
-  }
-  
-  done_workers.clear();
   if (close(socket_fd) < 0){
     perror("Close in user thread");
     exit(2);
@@ -146,7 +169,7 @@ void* worker_thread_fn(void* w) {
   // Read cracked passwords from the worker and print it to the console
   char buffer[256];
   int bytes_read = read(worker_socket, buffer, 256);
-    
+ 
   // Continuously reading from the worker_socket to get output
   while (bytes_read > 0) {
     if(write(user_socket, buffer, 256) < 0) {
@@ -164,10 +187,7 @@ void* worker_thread_fn(void* w) {
     exit(2);
   }
 
-  list_of_workers[worker_socket] = false;
-  done_workers.push_back(worker_socket);
-  printf("Size of done_workers is: %zu\n", done_workers.size());
-  printf("Added the workers that are done.\n");
+  list_of_workers[worker_socket] = true;
   
   // Close the socket
   if (close(worker_socket) < 0){

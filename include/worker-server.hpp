@@ -29,7 +29,7 @@ typedef struct __attribute__((packed)) task_args_worker {
   char inputs[256];
   // TODO: will change it to a list of inputs in the future
   // std::vector<char*> inputs;
-  int section_num;
+  char chunk[256];
 }task_arg_worker_t;
 
 typedef struct __attribute__((packed)) task_args_user {
