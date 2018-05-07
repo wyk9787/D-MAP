@@ -14,12 +14,16 @@
 #define PASSWORD_LENGTH 6
 #define NUM_WORKERS 4
 
-int SECTION_NUM;
-size_t INITIAL_PASSWORD = 0;
-size_t TOTAL_PASSWORDS;
+size_t TOTAL_PASSWORDS = 308915776; // 26^6 
+
+size_t PROCESS_SO_FAR = 0;
+size_t STEP = 38614472; // 26^6/8
 
 // Use this struct to pass arguments to our threads
-typedef struct thread_args { int arg; } thread_args_t;
+typedef struct thread_args { 
+  long pos_begin;
+  size_t offset; 
+} thread_args_t;
 
 // use this struct to receive results from our threads
 typedef struct thread_result { int result; } thread_result_t;
@@ -32,10 +36,27 @@ typedef struct password_entry {
 } password_entry_t;
 
 void crack_passwords(char *plaintext);
-void generate_all_possibilities(size_t number);
+void generate_all_possibilities(long pos_begin, size_t offset);
 int md5_string_to_bytes(const char *md5_string, uint8_t *bytes);
 password_entry_t *read_password_file(const char *filename);
 void print_md5_bytes(const uint8_t *bytes);
+char* get_next();
+bool has_next();
+
+char* get_next() {
+  char* ret = malloc(10 * sizeof(char));
+  if(ret == NULL) {
+    perror("malloc");
+    exit(1);
+  }
+  sprintf(ret, "%zu", PROCESS_SO_FAR);
+  PROCESS_SO_FAR += STEP;
+  return ret;  
+}
+
+bool has_next() {
+  return PROCESS_SO_FAR < TOTAL_PASSWORDS;
+}
 
 password_entry_t *passwords;
 
@@ -55,7 +76,7 @@ password_entry_t *passwords;
 void *thread_fn(void *void_args) {
   // Case the args pointer to the appropriate type and print our argument
   thread_args_t *args = (thread_args_t *)void_args;
-  generate_all_possibilities(args->arg);
+  generate_all_possibilities(args->pos_begin, args->offset);
   // Return the pointer to allocated memory to our parent thread.
   return NULL;
 }
@@ -63,15 +84,13 @@ void *thread_fn(void *void_args) {
 int entrance(int argc, char **argv) {
 
   if (argc != 3) {
-    fprintf(stderr, "Usage: %s <path to password directory file> <#section of password this program should calculate>\n", argv[0]);
+    fprintf(stderr, "Usage: %s <path to password directory file> <starting position for the chunk>\n", argv[0]);
     exit(1);
   }
 
   // Read in the password file
   passwords = read_password_file(argv[1]);
-  SECTION_NUM = strtol(argv[2], NULL, 10);
-  TOTAL_PASSWORDS = pow(26.0, PASSWORD_LENGTH) / NUM_WORKERS;
-  INITIAL_PASSWORD = SECTION_NUM * TOTAL_PASSWORDS;
+  long pos_begin = strtol(argv[2], NULL, 10); 
 
   // Initilization
   password_entry_t *current = passwords;
@@ -79,8 +98,7 @@ int entrance(int argc, char **argv) {
     current->cracked = false;
     current = current->next;
   }
-  // You'll have to move over any code from partB that you would like to use.
-  // Here's a quick little thread demo.
+
   pthread_t threads[NUM_THREAD];
 
   // Make NUM_THREAD amount of structs so we can pass arguments to our threads
@@ -88,7 +106,8 @@ int entrance(int argc, char **argv) {
 
   // Create threads
   for (size_t i = 0; i < NUM_THREAD; i++) {
-    thread_args[i].arg = i * TOTAL_PASSWORDS / NUM_THREAD;
+    thread_args[i].pos_begin = pos_begin;    
+    thread_args[i].offset = i * STEP / NUM_THREAD;
     if (pthread_create(&threads[i], NULL, thread_fn, &thread_args[i]) != 0) {
       perror("Error creating thread 1");
       exit(2);
@@ -109,11 +128,11 @@ int entrance(int argc, char **argv) {
   return 0;
 }
 
-void generate_all_possibilities(size_t number) {
+void generate_all_possibilities(long pos_begin, size_t offset) {
   int cur_digit = PASSWORD_LENGTH - 1;
-  size_t len = TOTAL_PASSWORDS / NUM_THREAD;
+  size_t len = STEP / NUM_THREAD;
   char guess[7] = "aaaaaa";
-  size_t start = INITIAL_PASSWORD + number;
+  size_t start = pos_begin + offset;
   size_t end = start + len;
   for (size_t i = start; i < end; i++) {
     size_t num = i;
