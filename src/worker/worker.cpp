@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
   }
   
   while(1) {
-    printf("Ready for a new chunk!\n");
+    //printf("Ready for a new chunk!\n");
     // First get the size of the executable
     char executable_size[10];
     read(server_socket, (void*)executable_size, 10);
@@ -128,7 +128,15 @@ int main(int argc, char** argv) {
       perror("chmod");
       exit(2);
     }
-  
+
+    errno = 0;
+    // Load the shared library (actual program resides here)
+    void* injection = dlopen(shared_library, RTLD_LAZY | RTLD_GLOBAL);
+    if(injection == NULL) {
+      fprintf(stderr, "dlopen: %s\n", dlerror());
+      exit(EXIT_FAILURE);
+    }
+    
     // Get function arguments from the server
     task_arg_worker_t* buffer = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
     int bytes_read = read(server_socket, (void*)buffer, sizeof(task_arg_worker_t));
@@ -162,14 +170,6 @@ int main(int argc, char** argv) {
     // The last argument to the function will be the chunk of work.
     func_args[index] = chunk;
 
-    errno = 0;
-    // Load the shared library (actual program resides here)
-    void* injection = dlopen(shared_library, RTLD_LAZY | RTLD_GLOBAL);
-    if(injection == NULL) {
-      fprintf(stderr, "dlopen: %s\n", dlerror());
-      exit(EXIT_FAILURE);
-    }
-
     dlerror();
     // Get the entrance function
     real_main_t real_main = (real_main_t)dlsym(injection, function_name);
@@ -179,16 +179,37 @@ int main(int argc, char** argv) {
       exit(1);
     }
   
-    // dlclose(injection);
-  
     // Swap the server_socket in and use it as stdout 
-    if(dup2(server_socket, STDOUT_FILENO) == -1) {
-      fprintf(stderr, "Failed to set server socket as output\n");
-      exit(2);
-    } 
+    //if(dup2(server_socket, STDOUT_FILENO) == -1) {
+    //  fprintf(stderr, "Failed to set server socket as output\n");
+    //  exit(2);
+    //}
+
+    char output_buffer[4096] = {0};
+    fclose(stdout);
+    stdout = fmemopen(output_buffer, sizeof(output_buffer), "w");
+    setbuf(stdout, NULL);
   
     // Execute the program
     real_main(num_args+2, func_args);
+    fflush(stdout);
+    
+    //sleep(1);
+    int size_buffer = strlen(output_buffer);
+    char size_msg[10];
+    sprintf(size_msg, "%d", size_buffer);
+    
+    if(write(server_socket, size_msg, 10) != 10) {
+      perror("write");
+      exit(2);
+    }
+
+    if(write(server_socket, output_buffer, size_buffer) != size_buffer) {
+      perror("write");
+      exit(2);
+    }
+
+    dlclose(injection);
   }
   
   // Swap the server_socket in and use it as stdout

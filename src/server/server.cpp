@@ -166,28 +166,43 @@ void* worker_thread_fn(void* w) {
   thread_arg_t* args = (thread_arg_t*)w;
   int worker_socket = args->socket_fd;
 
-  // Read cracked passwords from the worker and print it to the console
-  char buffer[256];
-  int bytes_read = read(worker_socket, buffer, 256);
- 
-  // Continuously reading from the worker_socket to get output
-  while (bytes_read > 0) {
-    if(write(user_socket, buffer, 256) < 0) {
+  while(true) {  
+    // Read cracked passwords from the worker and print it to the console
+    char buffer[10];
+    // Read output size from the worker
+    int bytes_read = read(worker_socket, buffer, 10);
+
+    // Write output size to the user
+    if(write(user_socket, buffer, 10) < 0) {
       perror("write");
       exit(2);
     }
-    printf("bytes_read: %d\n", bytes_read);
-    buffer[bytes_read] = '\0';
-    bytes_read = read(worker_socket, buffer, 256);
-  }
 
-  // Check for error
-  if(bytes_read < 0) {
-    perror("read failed");
-    exit(2);
-  }
+    // Save the size of the output
+    int bytes_to_read = atoi(buffer);
+    
+    printf("Bytes to read: %d\n", bytes_to_read);
+    char output_buffer[256] = {0};
 
-  list_of_workers[worker_socket] = true;
+    // Read actual output from the worker
+    int output_read = read(worker_socket, output_buffer, bytes_to_read);
+    // Check for error
+    if(output_read < 0) {
+      perror("read failed");
+      exit(2);
+    }
+    output_buffer[output_read] = '\0';
+
+    printf("Received: %d bytes: %s", output_read, output_buffer);
+
+    // Write output to the user
+    if(write(user_socket, output_buffer, output_read) < 0) {
+      perror("write");
+      exit(2);
+    }
+     
+    list_of_workers[worker_socket] = true;
+  }
   
   // Close the socket
   if (close(worker_socket) < 0){
