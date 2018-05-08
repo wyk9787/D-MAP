@@ -166,18 +166,29 @@ int main(int argc, char** argv) {
   
   
   // Reading program's output
-  char size_buffer[256];
-  char print_buffer[256];
-  while(ret > 0) {
-    ret = read(server_socket, print_buffer, 256);
-    printf("%s", print_buffer);
+  char size_buffer[10];
+
+  while (true) {
+    int bytes_read = read(server_socket, size_buffer, 10);
+
+    // Save the size of the output
+    int bytes_to_read = atoi(size_buffer);
+    if (bytes_to_read == 0)
+      break;
+
+    char print_buffer[256] = {0};
+  
+    while(bytes_to_read > 0) {
+      int ret = read(server_socket, print_buffer, bytes_to_read);
+      if(ret < 0) {
+        perror("read");
+        exit(2);
+      }
+      printf("%s", print_buffer);
+      bytes_to_read -= ret;
+    }
   }
 
-  // Error checking
-  if(ret < 0) {
-    perror("read");
-    exit(2);
-  }
   printf("Finish reading\n");
 
   return 0;

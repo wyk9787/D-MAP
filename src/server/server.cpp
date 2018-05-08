@@ -12,6 +12,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unordered_map>
+#include <algorithm>
 #include "worker-server.hpp"
 
 // define function pointers 
@@ -150,10 +151,28 @@ void * user_thread_fn (void* u) {
     write(worker_socket, (void*)task_arg_worker, sizeof(task_arg_worker_t));
   }
 
+  bool check = false;
+  while(check == false) {
+    for(auto cur : list_of_workers) {
+      if(cur.second == false) { // This worker is not done
+        goto cnt;
+      }
+    }
+    printf("now I'm done\n");
+    check = true;
+  cnt:;
+  }
+  
+  char buffer[10] = "0";
+  if (write(user_socket, buffer, 10) < 0) {
+    perror("write");
+    exit(2);
+  }
+
   if (close(socket_fd) < 0){
     perror("Close in user thread");
     exit(2);
-  }
+  } 
   printf("Got all the done workers.\n");
   return NULL;
 }
@@ -171,36 +190,41 @@ void* worker_thread_fn(void* w) {
     char buffer[10];
     // Read output size from the worker
     int bytes_read = read(worker_socket, buffer, 10);
-
+    // Save the size of the output
+    int bytes_to_read = atoi(buffer);
+    if (bytes_to_read == 0) {
+      list_of_workers[worker_socket] = true;
+      continue;
+    }
+    
     // Write output size to the user
     if(write(user_socket, buffer, 10) < 0) {
       perror("write");
       exit(2);
     }
 
-    // Save the size of the output
-    int bytes_to_read = atoi(buffer);
-    
-    printf("Bytes to read: %d\n", bytes_to_read);
     char output_buffer[256] = {0};
 
-    // Read actual output from the worker
-    int output_read = read(worker_socket, output_buffer, bytes_to_read);
-    // Check for error
-    if(output_read < 0) {
-      perror("read failed");
-      exit(2);
-    }
-    output_buffer[output_read] = '\0';
+    while(bytes_to_read > 0) {
 
-    printf("Received: %d bytes: %s", output_read, output_buffer);
+      // Read actual output from the worker
+      int output_read = read(worker_socket, output_buffer, bytes_to_read);
+      // Check for error
+      if(output_read < 0) {
+        perror("read failed");
+        exit(2);
+      }
+      output_buffer[output_read] = '\0';
 
-    // Write output to the user
-    if(write(user_socket, output_buffer, output_read) < 0) {
-      perror("write");
-      exit(2);
+      printf("Received: %d bytes: %s", output_read, output_buffer);
+
+      // Write output to the user
+      if(write(user_socket, output_buffer, output_read) < 0) {
+        perror("write");
+        exit(2);
+      }
+      bytes_to_read -= output_read;
     }
-     
     list_of_workers[worker_socket] = true;
   }
   
