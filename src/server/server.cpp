@@ -152,7 +152,7 @@ void * user_thread_fn (void* u) {
   }
 
   bool check = false;
-  while(check == false) {
+  while(!check) {
     for(auto cur : list_of_workers) {
       if(cur.second == false) { // This worker is not done
         goto cnt;
@@ -162,7 +162,8 @@ void * user_thread_fn (void* u) {
     check = true;
   cnt:;
   }
-  
+
+  //inform the user that there is nothing left to read
   char buffer[10] = "0";
   if (write(user_socket, buffer, 10) < 0) {
     perror("write");
@@ -192,6 +193,8 @@ void* worker_thread_fn(void* w) {
     int bytes_read = read(worker_socket, buffer, 10);
     // Save the size of the output
     int bytes_to_read = atoi(buffer);
+    
+    //not sending to the user if chunk is size 0
     if (bytes_to_read == 0) {
       list_of_workers[worker_socket] = true;
       continue;

@@ -173,6 +173,8 @@ int main(int argc, char** argv) {
 
     // Save the size of the output
     int bytes_to_read = atoi(size_buffer);
+
+    //if there is nothing left to read
     if (bytes_to_read == 0)
       break;
 
