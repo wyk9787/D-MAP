@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <vector>
 #include <string>
+#include <time.h>
 #include "worker-server.hpp"
 
 #define PORT_NUMBER 60519
@@ -21,9 +22,6 @@
 
 // The pointer to the function in the library that will be executed
 typedef int (*real_main_t)(int argc, char** argv);
-
-// NOTE: relative path doesn't seem to work here
-const char* shared_library = "./injection.so";
 
 /**
  * Makes a socket and connect to another with the given address on the given port.
@@ -66,6 +64,7 @@ int socket_connect(char * server_address, int port) {
 }
 
 int main(int argc, char** argv) {
+  srand(time(NULL));
   if(argc != 2) {
     fprintf(stderr, "Usage: %s <server address>\n", argv[0]);
     exit(EXIT_FAILURE);
@@ -83,9 +82,7 @@ int main(int argc, char** argv) {
     perror("write");
     exit(2);
   }
-  
   while(1) {
-    //printf("Ready for a new chunk!\n");
     // First get the size of the executable
     char executable_size[10];
     read(server_socket, (void*)executable_size, 10);
@@ -93,9 +90,11 @@ int main(int argc, char** argv) {
   
     // Then get the executable file and save it locally
     char executable[filesize];
-    int bytes_to_read = filesize;
-    int prev_read = 0;
+    int bytes_to_read = filesize;;
 
+    char shared_library[40];
+    int rand_num = rand();
+    sprintf(shared_library, "./injection%d.so", rand_num);
     // Open a temp file in the "write-binary" mode.
     FILE * exe_lib = fopen(shared_library, "wb");
     if (exe_lib == NULL) { 
@@ -104,16 +103,16 @@ int main(int argc, char** argv) {
     }
 
     int executable_read;
+    int prev_read = 0;
     // Keep reading bytes until the entire file is read.
     while (bytes_to_read > 0) {
-      executable_read = read(server_socket, (void*)executable, filesize);
+      executable_read = read(server_socket, executable+prev_read, filesize);
+      if(executable_read < 0) {
+        perror("read executable");
+        exit(2);
+      }
       bytes_to_read -= executable_read;
       prev_read += executable_read;
-    }
-
-    if(executable_read < 0) {
-      perror("read");
-      exit(2);
     }
   
     // Write the read bytes to the file.
@@ -137,89 +136,95 @@ int main(int argc, char** argv) {
       exit(EXIT_FAILURE);
     }
     
-    // Get function arguments from the server
-    task_arg_worker_t* buffer = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
-    int bytes_read = read(server_socket, (void*)buffer, sizeof(task_arg_worker_t));
-    if(bytes_read < sizeof(task_arg_worker_t)) {
-      fprintf(stderr,"Read: Not reading enough bytes. Expected: %lu; Actual: %d", sizeof(task_arg_worker_t), bytes_read);
-      exit(2);
-    }
+    while(1) {// Keep looping until finish this task
+      char result[2];
+      if(read(server_socket, result, 2) < 0) {
+        perror("read");
+        exit(1);
+      }
+      int cmd = atoi(result);
+      if(cmd == 0) { // We are done with this task
+        break;
+      }
+      
+      // Get function arguments from the server
+      task_arg_worker_t* buffer = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
+      int bytes_read = read(server_socket, (void*)buffer, sizeof(task_arg_worker_t));
+      if(bytes_read < sizeof(task_arg_worker_t)) {
+        fprintf(stderr,"Read: Not reading enough bytes. Expected: %lu; Actual: %d", sizeof(task_arg_worker_t), bytes_read);
+        exit(2);
+      }
  
-    // Unpack the function arguments sent from the server
-    int num_args = buffer->num_args;
-    char function_name[256];
-    strcpy(function_name, buffer->function_name);
-    char inputs[256];
-    strcpy(inputs, buffer->inputs);
-    char chunk[256];
-    strcpy(chunk, buffer->chunk);
+      // Unpack the function arguments sent from the server
+      int num_args = buffer->num_args;
+      char function_name[256];
+      strcpy(function_name, buffer->function_name);
+      char inputs[256];
+      strcpy(inputs, buffer->inputs);
+      char chunk[256];
+      strcpy(chunk, buffer->chunk);
 
-    // Initialize the arguments to the program
-    char* func_args[num_args];
-    int index = 0;
+      dlerror();
+      // Get the entrance function
+      real_main_t real_main = (real_main_t)dlsym(injection, function_name);
+      char* error = dlerror();
+      if(error != NULL) {
+        printf("Error: %s\n", error);
+        exit(1);
+      }
+      
+      // Initialize the arguments to the program
+      char* func_args[num_args];
+      int index = 0;
 
-    // The first argument to the function will be the name of the function
-    func_args[0] = function_name;
-    index++;
+      // The first argument to the function will be the name of the function
+      func_args[0] = function_name;
+      index++;
 
-    // The next argument[s] are the input(s) to the function
-    // TODO: Will change it to a list of inputs
-    func_args[index] = inputs;
-    index++;
+      // The next argument[s] are the input(s) to the function
+      // TODO: Will change it to a list of inputs
+      func_args[index] = inputs;
+      index++;
 
-    // The last argument to the function will be the chunk of work.
-    func_args[index] = chunk;
+      // The last argument to the function will be the chunk of work.
+      func_args[index] = chunk;
 
-    dlerror();
-    // Get the entrance function
-    real_main_t real_main = (real_main_t)dlsym(injection, function_name);
-    char* error = dlerror();
-    if(error != NULL) {
-      printf("Error: %s\n", error);
+
+
+      char output_buffer[4096] = {0};
+      fclose(stdout);
+      stdout = fmemopen(output_buffer, sizeof(output_buffer), "w");
+      setbuf(stdout, NULL);
+  
+      // Execute the program
+      real_main(num_args+2, func_args);
+      fflush(stdout);
+
+      int size_buffer = strlen(output_buffer);
+      char size_msg[10];
+      sprintf(size_msg, "%d", size_buffer);
+    
+      if(write(server_socket, size_msg, 10) != 10) {
+        perror("write");
+        exit(2);
+      }
+
+      if(write(server_socket, output_buffer, size_buffer) != size_buffer) {
+        perror("write");
+        exit(2);
+      }
+
+      free(buffer);
+    }
+
+    // Close the shared library
+    if(dlclose(injection) != 0) {
+      dlerror();
       exit(1);
     }
-  
-    // Swap the server_socket in and use it as stdout 
-    //if(dup2(server_socket, STDOUT_FILENO) == -1) {
-    //  fprintf(stderr, "Failed to set server socket as output\n");
-    //  exit(2);
-    //}
-
-    char output_buffer[4096] = {0};
-    fclose(stdout);
-    stdout = fmemopen(output_buffer, sizeof(output_buffer), "w");
-    setbuf(stdout, NULL);
-  
-    // Execute the program
-    real_main(num_args+2, func_args);
-    fflush(stdout);
-    
-    //sleep(1);
-    int size_buffer = strlen(output_buffer);
-    char size_msg[10];
-    sprintf(size_msg, "%d", size_buffer);
-    
-    if(write(server_socket, size_msg, 10) != 10) {
-      perror("write");
-      exit(2);
-    }
-
-    if(write(server_socket, output_buffer, size_buffer) != size_buffer) {
-      perror("write");
-      exit(2);
-    }
-
-    dlclose(injection);
   }
-  /*
-  // Swap the server_socket in and use it as stdout
-  if(dup2(STDOUT_FILENO, server_socket) == -1) {
-    fprintf(stderr, "Failed to set server socket as output\n");
-    exit(2);
-  }
-  */
   
-  //close
+  //close the connection to the socket
   if (close(server_socket) < 0) {
     perror("Close in worker");
     exit(2);

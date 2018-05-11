@@ -55,8 +55,6 @@ void * user_thread_fn (void* u) {
   int bytes_to_read = filesize;
   int prev_read = 0;
 
-
-
   // Keep reading bytes until the entire file is read.
   while(bytes_to_read > 0){
     // Executable_read indicates the bytes already read by the read function.
@@ -123,10 +121,18 @@ void * user_thread_fn (void* u) {
     printf("get_next error: %s\n", error);
     exit(1);
   }
-  
-  int section_num = 0;
-  int list_size = list_of_workers.size();
 
+  #if 1
+  char test_temp[filesize];
+  memcpy(test_temp, executable, filesize);
+  static int counter = 0;
+  char test_file[20];
+  sprintf(test_file, "test%d.so", counter++);
+  FILE* test = fopen(test_file, "wb");
+  fwrite(test_temp, filesize, 1, test);
+  fclose(test);
+  #endif
+  
   // Sending the excutable to every worker
   for(auto cur : list_of_workers) {
     int socket = cur.first;
@@ -138,7 +144,7 @@ void * user_thread_fn (void* u) {
       perror("write");
       exit(2);
     }
-    
+
     // Send the executable file to the worker
     if(write(socket, temp, filesize) != filesize) {
       perror("Write executable");
@@ -251,17 +257,19 @@ void* worker_thread_fn(void* w) {
     }
   
     char output_buffer[256] = {0};
-
+    int prev_read = 0;
+    
     while(bytes_to_read > 0) {
 
       // Read actual output from the worker
-      int output_read = read(worker_socket, output_buffer, bytes_to_read);
+      int output_read = read(worker_socket, output_buffer + prev_read, bytes_to_read);
       // Check for error
       if(output_read < 0) {
         perror("read failed");
         exit(2);
       }
-      assert(output_read != 0);
+      if (output_read == 0)
+        break;
       output_buffer[output_read] = '\0';
       printf("Receive: %s\n", output_buffer);
 
@@ -271,6 +279,7 @@ void* worker_thread_fn(void* w) {
         exit(2);
       }
       bytes_to_read -= output_read;
+      prev_read += output_read;
     }
     list_of_workers[worker_socket] = true;
     pthread_mutex_unlock(&mutex);
