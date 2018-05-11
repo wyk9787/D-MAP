@@ -1,5 +1,5 @@
 ROOT = ../../
-TARGETS = d-map-injection.so
+TARGETS = password_7char.so
 LIBS = crypto pthread
 
 include $(ROOT)/common.mk

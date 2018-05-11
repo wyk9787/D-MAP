@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# A script to see when is the port unbounded any more
+
 output="bind"
 
 lsof ti:60519 | xargs kill -9

@@ -1,5 +1,5 @@
 ROOT = ../../
-TARGETS = injection-7.so
+TARGETS = password_6char.so
 LIBS = crypto pthread
 
 include $(ROOT)/common.mk
