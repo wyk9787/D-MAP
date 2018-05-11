@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <time.h>
 #include <assert.h>
+#include <sys/stat.h>
 #include "worker-server.hpp"
 
 // define function pointers 
@@ -66,7 +67,7 @@ void * user_thread_fn (void* u) {
   // Set up the filename for shared library
   char shared_library[40];
   int rand_num = rand();
-  sprintf(shared_library, "temp%d.so", rand_num);
+  sprintf(shared_library, "./temp%d.so", rand_num);
   
   // Open a temp file in the "write-binary" mode.
   FILE * exe_lib = fopen(shared_library, "wb");
@@ -83,6 +84,12 @@ void * user_thread_fn (void* u) {
 
   // Close file stream.
   fclose(exe_lib);
+
+  // Make shared object executable
+  if(chmod(shared_library, S_IRUSR | S_IWUSR | S_IXUSR | S_IXGRP | S_IRGRP | S_IWGRP | S_IXOTH | S_IROTH | S_IWOTH) != 0) {
+    perror("chmod");
+    exit(2);
+  }
   
   // 3.Finally get the arguments from user.
   task_arg_user_t task_args;
@@ -100,12 +107,12 @@ void * user_thread_fn (void* u) {
   strcpy(inputs, task_args.inputs); // TODO: will change to a list of inputs in the future
 
   // Load the shared library
-
   void* program = dlopen(shared_library, RTLD_LAZY | RTLD_GLOBAL);
   if(program == NULL) {
     fprintf(stderr, "dlopen: %s\n", dlerror());
     exit(EXIT_FAILURE);
   }
+
   // Get the iterator functions
   dlerror();
   has_next_t has_next = (has_next_t)dlsym(program, "has_next");
@@ -122,18 +129,7 @@ void * user_thread_fn (void* u) {
     exit(1);
   }
 
-  #if 1
-  char test_temp[filesize];
-  memcpy(test_temp, executable, filesize);
-  static int counter = 0;
-  char test_file[20];
-  sprintf(test_file, "test%d.so", counter++);
-  FILE* test = fopen(test_file, "wb");
-  fwrite(test_temp, filesize, 1, test);
-  fclose(test);
-  #endif
-  
-  // Sending the excutable to every worker
+  // Loop through all workers
   for(auto cur : list_of_workers) {
     int socket = cur.first;
     char temp[filesize];
