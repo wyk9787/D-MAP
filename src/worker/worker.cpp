@@ -211,12 +211,13 @@ int main(int argc, char** argv) {
 
     dlclose(injection);
   }
-  
+  /*
   // Swap the server_socket in and use it as stdout
   if(dup2(STDOUT_FILENO, server_socket) == -1) {
     fprintf(stderr, "Failed to set server socket as output\n");
     exit(2);
   }
+  */
   
   //close
   if (close(server_socket) < 0) {
