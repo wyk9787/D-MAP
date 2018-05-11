@@ -17,7 +17,6 @@
 #include <time.h>
 #include "worker-server.hpp"
 
-#define PORT_NUMBER 60519
 #define WORKER_JOIN -1
 
 // The pointer to the function in the library that will be executed
