@@ -13,6 +13,8 @@
 #include <arpa/inet.h>
 #include <unordered_map>
 #include <algorithm>
+#include <time.h>
+#include <assert.h>
 #include "worker-server.hpp"
 
 // define function pointers 
@@ -29,6 +31,8 @@ std::unordered_map<int, bool> list_of_workers;
 typedef struct thread_args {
   int socket_fd;
 }thread_arg_t;
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void * user_thread_fn (void* u) {
   printf("In the user thread.\n");
@@ -51,22 +55,28 @@ void * user_thread_fn (void* u) {
   int bytes_to_read = filesize;
   int prev_read = 0;
 
-  // Open a temp file in the "write-binary" mode.
-  FILE * exe_lib = fopen("temp.so", "wb");
-  if(exe_lib == NULL) { 
-    perror("Failed: ");
-    exit(1);
-  }
+
 
   // Keep reading bytes until the entire file is read.
   while(bytes_to_read > 0){
     // Executable_read indicates the bytes already read by the read function.
     int executable_read = read(socket_fd, executable + prev_read, bytes_to_read);
-    printf("Read %d bytes of executable.\n", executable_read);
     bytes_to_read -= executable_read;
     prev_read += executable_read;
   }
 
+  // Set up the filename for shared library
+  char shared_library[40];
+  int rand_num = rand();
+  sprintf(shared_library, "temp%d.so", rand_num);
+  
+  // Open a temp file in the "write-binary" mode.
+  FILE * exe_lib = fopen(shared_library, "wb");
+  if(exe_lib == NULL) { 
+    perror("Failed: ");
+    exit(1);
+  }
+  
   // Write the read bytes to the file.
   if (fwrite(executable, filesize, 1, exe_lib) != 1){
     fprintf(stderr, "fwrite\n");
@@ -90,10 +100,10 @@ void * user_thread_fn (void* u) {
   strcpy(function_name, task_args.function_name);
   char inputs[256];
   strcpy(inputs, task_args.inputs); // TODO: will change to a list of inputs in the future
-  printf("Read num_of_arguments: %d, read functionname: %s, read inputs: %s.\n", num_args, function_name, inputs);
 
   // Load the shared library
-  void* program = dlopen("temp.so", RTLD_LAZY | RTLD_GLOBAL);
+
+  void* program = dlopen(shared_library, RTLD_LAZY | RTLD_GLOBAL);
   if(program == NULL) {
     fprintf(stderr, "dlopen: %s\n", dlerror());
     exit(EXIT_FAILURE);
@@ -116,9 +126,36 @@ void * user_thread_fn (void* u) {
   
   int section_num = 0;
   int list_size = list_of_workers.size();
+
+  // Sending the excutable to every worker
+  for(auto cur : list_of_workers) {
+    int socket = cur.first;
+    char temp[filesize];
+    memcpy(temp, executable, filesize);
+    
+    //First send the size of the executable file
+    if(write(socket, executable_size, 10) != 10) {
+      perror("write");
+      exit(2);
+    }
+    
+    // Send the executable file to the worker
+    if(write(socket, temp, filesize) != filesize) {
+      perror("Write executable");
+      exit(2);
+    }
+  }
+
+  printf("Sent all executables\n");
+
+  // Pack arguments for the worker
+  task_arg_worker_t* task_arg_worker = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
+  task_arg_worker->num_args = num_args;
+  strcpy(task_arg_worker->function_name, function_name);
+  strcpy(task_arg_worker->inputs, inputs);
   
   while(has_next()) {
-    printf("Inside of has_next\n");
+    printf("Inside has_next\n");
     int worker_socket;
     // Check if the worker is free. If so, give it a task; otherwise, skip it.
     bool found = false;
@@ -133,47 +170,54 @@ void * user_thread_fn (void* u) {
       }
       if(found) break; // If we found an avaialble worker, break from the while loop
     }
-    
-    //First send the size of the executable file
-    write(worker_socket, (void*)executable_size, 10);
-    
-    // Send the executable file to the worker
-    write(worker_socket, (void*)executable, filesize);
-    
-    // Pack arguments for the worker
-    task_arg_worker_t* task_arg_worker = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
-    task_arg_worker->num_args = num_args;
-    strcpy(task_arg_worker->function_name, function_name);
-    strcpy(task_arg_worker->inputs, inputs);
+
+    // Copy the new chunk into the struct
     strcpy(task_arg_worker->chunk, get_next());
 
-    // Send the task_arg_worker_t to the worker
-    write(worker_socket, (void*)task_arg_worker, sizeof(task_arg_worker_t));
-  }
+    // Set up the continue command
+    char to_go[2];
+    sprintf(to_go, "%d", 1);
 
-  bool check = false;
-  while(!check) {
-    for(auto cur : list_of_workers) {
-      if(cur.second == false) { // This worker is not done
-        goto cnt;
-      }
+    // Tell the worker there is more work on this task
+    if(write(worker_socket, to_go, 2) < 0) {
+      perror("write");
+      exit(2);
     }
-    printf("now I'm done\n");
-    check = true;
-  cnt:;
+    
+    // Send the task_arg_worker_t to the worker
+    if(write(worker_socket, (void*)task_arg_worker, sizeof(task_arg_worker_t)) < 0) {
+      perror("write");
+      exit(2);
+    }
   }
 
-  //inform the user that there is nothing left to read
-  char buffer[10] = "0";
-  if (write(user_socket, buffer, 10) < 0) {
-    perror("write");
-    exit(2);
+  // Wait until all workers done with their tasks
+  while(!std::all_of(list_of_workers.begin(), list_of_workers.end(), [](std::pair<int, bool> cur){ return cur.second == true; }));
+
+  // Set up the finishing message
+  char to_go[2];
+  sprintf(to_go, "%d", 0);
+   
+  for(auto cur : list_of_workers) {
+    int socket = cur.first;
+    // Tell the worker there is no more work on this task
+    if(write(socket, to_go, 2) < 0) {
+      perror("write");
+      exit(2);
+    }
   }
 
+  // Close the socket to the user so user know the task is finished
   if (close(socket_fd) < 0){
     perror("Close in user thread");
     exit(2);
-  } 
+  }
+
+  if(dlclose(program) != 0) {
+    dlerror();
+    exit(1);
+  }
+  
   printf("Got all the done workers.\n");
   return NULL;
 }
@@ -187,25 +231,25 @@ void* worker_thread_fn(void* w) {
   int worker_socket = args->socket_fd;
 
   while(true) {  
-    // Read cracked passwords from the worker and print it to the console
     char buffer[10];
     // Read output size from the worker
     int bytes_read = read(worker_socket, buffer, 10);
     // Save the size of the output
     int bytes_to_read = atoi(buffer);
-    
+    printf("buffer size: %d\n", bytes_to_read);
     //not sending to the user if chunk is size 0
     if (bytes_to_read == 0) {
       list_of_workers[worker_socket] = true;
       continue;
     }
-    
+
+    pthread_mutex_lock(&mutex);
     // Write output size to the user
     if(write(user_socket, buffer, 10) < 0) {
       perror("write");
       exit(2);
     }
-
+  
     char output_buffer[256] = {0};
 
     while(bytes_to_read > 0) {
@@ -217,9 +261,9 @@ void* worker_thread_fn(void* w) {
         perror("read failed");
         exit(2);
       }
+      assert(output_read != 0);
       output_buffer[output_read] = '\0';
-
-      printf("Received: %d bytes: %s", output_read, output_buffer);
+      printf("Receive: %s\n", output_buffer);
 
       // Write output to the user
       if(write(user_socket, output_buffer, output_read) < 0) {
@@ -229,6 +273,7 @@ void* worker_thread_fn(void* w) {
       bytes_to_read -= output_read;
     }
     list_of_workers[worker_socket] = true;
+    pthread_mutex_unlock(&mutex);
   }
   
   // Close the socket
@@ -241,6 +286,7 @@ void* worker_thread_fn(void* w) {
 }
 
 int main() {
+  srand(time(NULL));
   // Set up a socket
   int s = socket(AF_INET, SOCK_STREAM, 0);
   if(s == -1) {

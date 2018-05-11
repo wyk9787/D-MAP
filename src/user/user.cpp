@@ -136,7 +136,6 @@ int main(int argc, char** argv) {
   // Send file size
   char size_message[10];
   sprintf(size_message, "%ld", filelen);
-  printf("size len: %s\n", size_message);
   if(write(server_socket, size_message, 10) == -1) {
     perror("write");
     exit(EXIT_FAILURE);
@@ -149,7 +148,6 @@ int main(int argc, char** argv) {
     perror("write");
     exit(EXIT_FAILURE);
   }
-  printf("Write %d bytes\n", write_bytes);
 
   // Send arguments
   task_arg_user_t args = {
@@ -158,7 +156,6 @@ int main(int argc, char** argv) {
   strncpy(args.function_name, function_name, strlen(function_name));
   strncpy(args.inputs, commands[0], strlen(commands[0]));
 
-  printf("num_args: %d, function_name: %s, inputs: %s\n", args.num_args, args.function_name, args.inputs);
   if(write(server_socket, &args, sizeof(task_arg_user_t)) == -1) {
     perror("write");
     exit(EXIT_FAILURE);
@@ -171,13 +168,14 @@ int main(int argc, char** argv) {
   while (true) {
     int bytes_read = read(server_socket, size_buffer, 10);
 
+    //if there is nothing left to read
+    if (bytes_read == 0)
+      break;
+    
     // Save the size of the output
     int bytes_to_read = atoi(size_buffer);
 
-    //if there is nothing left to read
-    if (bytes_to_read == 0)
-      break;
-
+    
     char print_buffer[256] = {0};
   
     while(bytes_to_read > 0) {
@@ -190,8 +188,6 @@ int main(int argc, char** argv) {
       bytes_to_read -= ret;
     }
   }
-
-  printf("Finish reading\n");
 
   return 0;
 }
