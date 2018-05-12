@@ -26,8 +26,7 @@ typedef int (*real_main_t)(int argc, char** argv);
  * Makes a socket and connect to another with the given address on the given port.
  * @param server_address, a string that represents the name of the server
  * @param port, an integer that represents the port number
- *
- * @returns file descriptor for the socket that is connected to server_address on port.
+ * * @returns file descriptor for the socket that is connected to server_address on port.
  */
 int socket_connect(char * server_address, int port) {
   // Turn the server name into an IP address
@@ -84,29 +83,33 @@ int main(int argc, char** argv) {
   while(1) {
     // First get the size of the executable
     char executable_size[10];
-    read(server_socket, (void*)executable_size, 10);
+    memset(executable_size, 10, 0);
+    if(read(server_socket, executable_size, 10) != 10) {
+      perror("exectuable size");
+      exit(2);  
+    }
     long filesize = strtol(executable_size, NULL, 10);
-  
+    printf("Read size %ld\n",filesize); 
     // Then get the executable file and save it locally
-    char executable[filesize];
+    unsigned char* executable = (unsigned char*)calloc(1, filesize+5);
+    if(executable == NULL) {
+      perror("calloc");
+      exit(2);
+    }
     int bytes_to_read = filesize;;
 
     char shared_library[40];
     int rand_num = rand();
     sprintf(shared_library, "./injection%d.so", rand_num);
-    // Open a temp file in the "write-binary" mode.
-    FILE * exe_lib = fopen(shared_library, "wb");
-    if (exe_lib == NULL) { 
-      perror("Failed: ");
-      exit(1);
-    }
 
     int executable_read;
     int prev_read = 0;
     // Keep reading bytes until the entire file is read.
     printf("Start reading exectuable\n");
     while (bytes_to_read > 0) {
-      executable_read = read(server_socket, executable+prev_read, filesize);
+      printf("Ready to read at %llu\n", (unsigned long long)(executable+ prev_read));
+      printf("Ready to read at %p\n", executable+ prev_read);
+      executable_read = read(server_socket, executable+prev_read, bytes_to_read);
       printf("Read %d bytes\n", executable_read);
       if(executable_read < 0) {
         perror("read executable");
@@ -114,15 +117,25 @@ int main(int argc, char** argv) {
       }
       bytes_to_read -= executable_read;
       prev_read += executable_read;
+      printf("end of loop\n");
     }
   
+    // Open a temp file in the "write-binary" mode.
+    FILE * exe_lib = fopen(shared_library, "wb");
+    if (exe_lib == NULL) { 
+      perror("Failed: ");
+      exit(1);
+    }
+
     // Write the read bytes to the file.
     if (fwrite(executable, filesize, 1, exe_lib) != 1){
       fprintf(stderr, "fwrite\n");
       exit(1);
     }
+    printf("writen\n");
 
     fclose(exe_lib);
+    free(executable);
   
     if(chmod(shared_library, S_IRUSR | S_IWUSR | S_IXUSR | S_IXGRP | S_IRGRP | S_IWGRP | S_IXOTH | S_IROTH | S_IWOTH) != 0) {
       perror("chmod");
@@ -138,6 +151,7 @@ int main(int argc, char** argv) {
     
     while(1) {// Keep looping until finish this task
       char result[2];
+      memset(result, 2, 0);
       if(read(server_socket, result, 2) < 0) {
         perror("read");
         exit(1);
@@ -149,6 +163,7 @@ int main(int argc, char** argv) {
       
       // Get function arguments from the server
       task_arg_worker_t* buffer = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
+      memset(buffer, sizeof(task_arg_worker_t), 0);
       int bytes_read = read(server_socket, (void*)buffer, sizeof(task_arg_worker_t));
       if(bytes_read < sizeof(task_arg_worker_t)) {
         fprintf(stderr,"Read: Not reading enough bytes. Expected: %lu; Actual: %d", sizeof(task_arg_worker_t), bytes_read);
@@ -188,8 +203,6 @@ int main(int argc, char** argv) {
 
       // The last argument to the function will be the chunk of work.
       func_args[index] = chunk;
-
-
 
       char output_buffer[4096] = {0};
       fclose(stdout);
