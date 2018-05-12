@@ -60,6 +60,10 @@ void * user_thread_fn (void* u) {
   while(bytes_to_read > 0){
     // Executable_read indicates the bytes already read by the read function.
     int executable_read = read(socket_fd, executable + prev_read, bytes_to_read);
+    if(executable_read < 0) {
+      perror("read executable");
+      exit(2);
+    }
     bytes_to_read -= executable_read;
     prev_read += executable_read;
   }
@@ -107,6 +111,7 @@ void * user_thread_fn (void* u) {
   strcpy(inputs, task_args.inputs); // TODO: will change to a list of inputs in the future
 
   // Load the shared library
+  dlerror();
   void* program = dlopen(shared_library, RTLD_LAZY | RTLD_GLOBAL);
   if(program == NULL) {
     fprintf(stderr, "dlopen: %s\n", dlerror());

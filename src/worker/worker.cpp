@@ -104,8 +104,10 @@ int main(int argc, char** argv) {
     int executable_read;
     int prev_read = 0;
     // Keep reading bytes until the entire file is read.
+    printf("Start reading exectuable\n");
     while (bytes_to_read > 0) {
       executable_read = read(server_socket, executable+prev_read, filesize);
+      printf("Read %d bytes\n", executable_read);
       if(executable_read < 0) {
         perror("read executable");
         exit(2);
@@ -127,7 +129,6 @@ int main(int argc, char** argv) {
       exit(2);
     }
 
-    errno = 0;
     // Load the shared library (actual program resides here)
     void* injection = dlopen(shared_library, RTLD_LAZY | RTLD_GLOBAL);
     if(injection == NULL) {
