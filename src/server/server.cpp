@@ -63,7 +63,6 @@ void * user_thread_fn (void* u) {
     if(executable_read < 0) {
       perror("read executable");
       return NULL;
-      exit(2);
     }
     bytes_to_read -= executable_read;
     prev_read += executable_read;
@@ -101,8 +100,9 @@ void * user_thread_fn (void* u) {
   int bytes = read(socket_fd, &task_args, sizeof(task_arg_user_t));
   if(bytes != sizeof(task_arg_user_t)) {
     fprintf(stderr, "Read: Not reading enough bytes. Expected: %lu; Actual: %d.\n", sizeof(task_arg_user_t), bytes);
-    exit(2);
+    return NULL;
   }
+  
   
   // Unpack arguments from the user
   int num_args = task_args.num_args;
@@ -255,7 +255,7 @@ void* worker_thread_fn(void* w) {
     // Write output size to the user
     if(write(user_socket, buffer, 10) < 0) {
       perror("write");
-      exit(2);
+      return NULL;
     }
   
     char output_buffer[256] = {0};
@@ -278,7 +278,7 @@ void* worker_thread_fn(void* w) {
       // Write output to the user
       if(write(user_socket, output_buffer, output_read) < 0) {
         perror("write");
-        exit(2);
+        return NULL;
       }
       bytes_to_read -= output_read;
       prev_read += output_read;
