@@ -5,6 +5,7 @@ import csv
 
 INPUT_FILES = ['input-6.in', 'input-7.in']
 NUM_ITERATION = 5
+OUTPUT_FILE = '../../result/result.csv'
 
 if len(sys.argv) < 3:
     print ('Usage: python test.py <SERVER_ADDRESS> <NUM_MACHINE>');
@@ -13,7 +14,7 @@ if len(sys.argv) < 3:
 SERVER_ADDR = sys.argv[1]
 NUM_MACHINE = sys.argv[2]
 
-# with open('result.csv', 'w', newline='') as csv_file:
+# with open(OUTPUT_FILE, 'w', newline='') as csv_file:
 #     writer = csv.writer(csv_file, delimiter=',')
 #     data = ["Input", "NUM_ITERATION", "AVERAGE_TIME", "NUM_MACHINE"]
 #     writer.writerow(data)
@@ -45,7 +46,7 @@ for f in INPUT_FILES:
     average_time = sum_time / NUM_ITERATION
     print ("Running on average: " + str(average_time))    
     # Write to a csv file    
-    with open('result.csv', 'a', newline='') as csv_file:
+    with open(OUTPUT_FILE, 'a', newline='') as csv_file:
         writer = csv.writer(csv_file, delimiter=',')
         data = [f, NUM_ITERATION, average_time, NUM_MACHINE]
         writer.writerow(data)
