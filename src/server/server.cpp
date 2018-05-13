@@ -45,7 +45,7 @@ void * user_thread_fn (void* u) {
   char executable_size[10];
   if((read(socket_fd, (void*)executable_size, 10)) == -1) {
     perror("read");
-    exit(1);
+    return NULL;
   }
   printf("Executable size is: %s\n", executable_size);
   long filesize = strtol(executable_size, NULL, 10);
@@ -62,6 +62,7 @@ void * user_thread_fn (void* u) {
     int executable_read = read(socket_fd, executable + prev_read, bytes_to_read);
     if(executable_read < 0) {
       perror("read executable");
+      return NULL;
       exit(2);
     }
     bytes_to_read -= executable_read;

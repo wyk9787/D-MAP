@@ -13,8 +13,8 @@
 #include <errno.h>
 #include <vector>
 
-#define D_SERVER_PORT 2020 
-#define PORT_NUMBER 2020
+#define D_SERVER_PORT 2024 
+#define PORT_NUMBER 2024
 #define WORKER_JOIN -1
 #define USER_JOIN -2
 
