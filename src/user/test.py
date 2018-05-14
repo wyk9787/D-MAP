@@ -8,7 +8,7 @@ NUM_ITERATION = 5
 OUTPUT_FILE = '../../result/result.csv'
 
 if len(sys.argv) < 3:
-    print ('Usage: python test.py <SERVER_ADDRESS> <NUM_MACHINE>');
+    print ('Usage: python3 test.py <SERVER_ADDRESS> <NUM_MACHINE>');
     sys,exit()
 
 SERVER_ADDR = sys.argv[1]
