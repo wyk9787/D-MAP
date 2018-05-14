@@ -13,7 +13,7 @@
 #include <errno.h>
 #include <vector>
 
-#define PORT_NUMBER 2236
+#define PORT_NUMBER 1406
 #define WORKER_JOIN -1
 #define USER_JOIN -2
 
