@@ -1,0 +1,3 @@
+Running locally
+password_6 17.34
+password_7 458.97
