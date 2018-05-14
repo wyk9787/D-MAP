@@ -19,16 +19,15 @@
 
 /**
  * The server will provide each worker with three types of arguments:
- * 1. the name of the function to execute
- * 2. a list of inputs
- * 3. the worker's section number (varies from worker to worker)
+ * 1. the number of inputs
+ * 2. the name of the function to execute
+ * 3. (at most) one input to the function
+ * 4. a chunk of task
  */
 typedef struct __attribute__((packed)) task_args_worker {
   int num_args;
   char function_name[256];
   char inputs[256];
-  // TODO: will change it to a list of inputs in the future
-  // std::vector<char*> inputs;
   char chunk[256];
 }task_arg_worker_t;
 
@@ -36,6 +35,4 @@ typedef struct __attribute__((packed)) task_args_user {
   int num_args;
   char function_name[256];
   char inputs[256];
-  // TODO: will change it to a list of inputs in the future
-  // std::vector<char*> inputs;
 }task_arg_user_t;
