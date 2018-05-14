@@ -36,7 +36,6 @@ typedef struct thread_args {
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void * user_thread_fn (void* u) {
-  printf("In the user thread.\n");
   // Unpack thread arguments
   thread_arg_t* args = (thread_arg_t*)u;
   int socket_fd = args->socket_fd;
@@ -47,9 +46,7 @@ void * user_thread_fn (void* u) {
     perror("read");
     return NULL;
   }
-  printf("Executable size is: %s\n", executable_size);
   long filesize = strtol(executable_size, NULL, 10);
-  printf("Read size: %ld.\n", filesize);
 
   // 2.Then get the executable file from the user (this file should be of filesize).
   char executable[filesize];
@@ -124,14 +121,14 @@ void * user_thread_fn (void* u) {
   has_next_t has_next = (has_next_t)dlsym(program, "has_next");
   char* error = dlerror();
   if(error != NULL) {
-    printf("has_next error: %s\n", error);
+    fprintf(stderr, "has_next error: %s\n", error);
     exit(1);
   }
 
   dlerror();
   get_next_t get_next = (get_next_t)dlsym(program, "get_next");
   if(error != NULL) {
-    printf("get_next error: %s\n", error);
+    fprintf(stderr, "get_next error: %s\n", error);
     exit(1);
   }
 
@@ -154,8 +151,6 @@ void * user_thread_fn (void* u) {
     }
   }
 
-  printf("Sent all executables\n");
-
   // Pack arguments for the worker
   task_arg_worker_t* task_arg_worker = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
   task_arg_worker->num_args = num_args;
@@ -163,7 +158,6 @@ void * user_thread_fn (void* u) {
   strcpy(task_arg_worker->inputs, inputs);
   
   while(has_next()) {
-    printf("Inside has_next\n");
     int worker_socket;
     // Check if the worker is free. If so, give it a task; otherwise, skip it.
     bool found = false;
@@ -225,15 +219,14 @@ void * user_thread_fn (void* u) {
     dlerror();
     exit(1);
   }
-  
+
   printf("Got all the done workers.\n");
+  
   return NULL;
 }
 
 
 void* worker_thread_fn(void* w) {
-  printf("In the worker thread.\n");
-  
   // Unpack thread arguments
   thread_arg_t* args = (thread_arg_t*)w;
   int worker_socket = args->socket_fd;
@@ -242,9 +235,10 @@ void* worker_thread_fn(void* w) {
     char buffer[10];
     // Read output size from the worker
     int bytes_read = read(worker_socket, buffer, 10);
+    
     // Save the size of the output
     int bytes_to_read = atoi(buffer);
-    printf("buffer size: %d\n", bytes_to_read);
+    
     //not sending to the user if chunk is size 0
     if (bytes_to_read == 0) {
       list_of_workers[worker_socket] = true;
@@ -262,10 +256,8 @@ void* worker_thread_fn(void* w) {
     int prev_read = 0;
     
     while(bytes_to_read > 0) {
-
       // Read actual output from the worker
       int output_read = read(worker_socket, output_buffer + prev_read, bytes_to_read);
-      // Check for error
       if(output_read < 0) {
         perror("read failed");
         exit(2);
@@ -273,7 +265,6 @@ void* worker_thread_fn(void* w) {
       if (output_read == 0)
         break;
       output_buffer[output_read] = '\0';
-      printf("Receive: %s\n", output_buffer);
 
       // Write output to the user
       if(write(user_socket, output_buffer, output_read) < 0) {
@@ -309,7 +300,7 @@ int main() {
   struct sockaddr_in addr;
   addr.sin_addr.s_addr = INADDR_ANY;
   addr.sin_family = AF_INET;
-  addr.sin_port = htons(D_SERVER_PORT);
+  addr.sin_port = htons(PORT_NUMBER);
 
   // Bind to the specified address
   if(bind(s, (struct sockaddr*)&addr, sizeof(struct sockaddr_in))) {
@@ -331,7 +322,7 @@ int main() {
     // Blocking call: accepts connection from a user/worker and gets its socket
     int client_socket = accept(s, (struct sockaddr*)&client_addr, &client_addr_len);
 
-    printf("Accept a connection from client.\n");
+    printf("Accept a connection.\n");
     // Getting IP address of the client
     char ipstr[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &client_addr.sin_addr, ipstr, INET_ADDRSTRLEN);
@@ -342,12 +333,10 @@ int main() {
       perror("read failed");
       exit(2);
     }
-    printf("Read the identification message.\n");
     // Get the integer at the beginning of the message
     char* token = strtok(buffer, "\n");
     int sig = atoi(token);
 
-    printf("Got message from client.\n");
     // Checks if the client is a user or a worker
     if(sig == WORKER_JOIN) {
       // Create the thread for worker
@@ -359,21 +348,20 @@ int main() {
         perror("pthread_create failed");
         exit(EXIT_FAILURE);
       }
-      printf("Client %d connected from %s\n", num_of_workers, ipstr);
+      printf("Worker %d connected from %s\n", num_of_workers, ipstr);
 
       // Add worker to the list
       list_of_workers.insert({client_socket, true});
       num_of_workers++;
     } else if(sig == USER_JOIN) {
       if(!user_exist){
-        printf("Identified a user.\n");
+        printf("A user joined.\n");
         // Create the thread for user
         thread_arg_t* args = (thread_arg_t*)malloc(sizeof(thread_arg_t));
         args->socket_fd = client_socket;
 
         // Let the server know the user socket
         user_socket = client_socket;
-        printf("In main, user_socket: %d\n", user_socket);
         pthread_t thread_user;
         if(pthread_create(&thread_user, NULL, user_thread_fn, args)) {
           perror("pthread_create failed");
@@ -384,9 +372,5 @@ int main() {
         write(client_socket, message, strlen(message));
       }
    }
-  
-    // Print information on the server side
-    printf("Worker %d disconnected.\n", num_of_workers);
-    
   }
 }

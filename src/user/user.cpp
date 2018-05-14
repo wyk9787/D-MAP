@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
   }
 
   char* server_address = argv[1];
-  int server_socket = socket_connect(server_address, D_SERVER_PORT);
+  int server_socket = socket_connect(server_address, PORT_NUMBER);
 
   char* program_path = NULL;
   size_t program_len;
@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
   while(strcmp(line, "NULL") != 0) { // Still have more commands
     // We need to get rid of the newline character
     strncpy(commands[num_args], line, strlen(line)); 
-    printf("line: %s\n", commands[num_args]);
+
     num_args++;
 
     line = NULL;

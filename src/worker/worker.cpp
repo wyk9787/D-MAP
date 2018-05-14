@@ -17,8 +17,6 @@
 #include <time.h>
 #include "worker-server.hpp"
 
-#define WORKER_JOIN -1
-
 // The pointer to the function in the library that will be executed
 typedef int (*real_main_t)(int argc, char** argv);
 
@@ -83,19 +81,13 @@ int main(int argc, char** argv) {
   while(1) {
     // First get the size of the executable
     char executable_size[10];
-    memset(executable_size, 10, 0);
     if(read(server_socket, executable_size, 10) != 10) {
       perror("exectuable size");
       exit(2);  
     }
     long filesize = strtol(executable_size, NULL, 10);
-    printf("Read size %ld\n",filesize); 
     // Then get the executable file and save it locally
-    unsigned char* executable = (unsigned char*)calloc(1, filesize+5);
-    if(executable == NULL) {
-      perror("calloc");
-      exit(2);
-    }
+    char executable[filesize];
     int bytes_to_read = filesize;;
 
     char shared_library[40];
@@ -105,19 +97,14 @@ int main(int argc, char** argv) {
     int executable_read;
     int prev_read = 0;
     // Keep reading bytes until the entire file is read.
-    printf("Start reading exectuable\n");
     while (bytes_to_read > 0) {
-      printf("Ready to read at %llu\n", (unsigned long long)(executable+ prev_read));
-      printf("Ready to read at %p\n", executable+ prev_read);
       executable_read = read(server_socket, executable+prev_read, bytes_to_read);
-      printf("Read %d bytes\n", executable_read);
       if(executable_read < 0) {
         perror("read executable");
         exit(2);
       }
       bytes_to_read -= executable_read;
       prev_read += executable_read;
-      printf("end of loop\n");
     }
   
     // Open a temp file in the "write-binary" mode.
@@ -132,10 +119,8 @@ int main(int argc, char** argv) {
       fprintf(stderr, "fwrite\n");
       exit(1);
     }
-    printf("writen\n");
 
     fclose(exe_lib);
-    free(executable);
   
     if(chmod(shared_library, S_IRUSR | S_IWUSR | S_IXUSR | S_IXGRP | S_IRGRP | S_IWGRP | S_IXOTH | S_IROTH | S_IWOTH) != 0) {
       perror("chmod");
@@ -151,7 +136,6 @@ int main(int argc, char** argv) {
     
     while(1) {// Keep looping until finish this task
       char result[2];
-      memset(result, 2, 0);
       if(read(server_socket, result, 2) < 0) {
         perror("read");
         exit(1);
@@ -163,7 +147,6 @@ int main(int argc, char** argv) {
       
       // Get function arguments from the server
       task_arg_worker_t* buffer = (task_arg_worker_t*)malloc(sizeof(task_arg_worker_t));
-      memset(buffer, sizeof(task_arg_worker_t), 0);
       int bytes_read = read(server_socket, (void*)buffer, sizeof(task_arg_worker_t));
       if(bytes_read < sizeof(task_arg_worker_t)) {
         fprintf(stderr,"Read: Not reading enough bytes. Expected: %lu; Actual: %d", sizeof(task_arg_worker_t), bytes_read);
@@ -184,7 +167,7 @@ int main(int argc, char** argv) {
       real_main_t real_main = (real_main_t)dlsym(injection, function_name);
       char* error = dlerror();
       if(error != NULL) {
-        printf("Error: %s\n", error);
+        fprintf(stderr, "Error: %s\n", error);
         exit(1);
       }
       
