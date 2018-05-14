@@ -9,9 +9,14 @@ directory.
 
 ### User
 
+0. To use this system, you need to compile your program into a shared object (.so file) and implement two functions:
+   - `bool has_next();` return true of false to indicate if there is more work that needs to be done
+   - `char* get_next();` return the next chunk of inputs to the entrance function
+   
+   See `src/password_6char/` and `src/password_7char` for examples.
 1. `cd src/user/`
 2. `./user <server_adress>`
-3. Answering the prompts by entering the request information.
+3. Answering the prompts by entering the request information. You can find example input file in `src/user/input-6.in` and `src/user/input-7.in`
 4. The user program will send information to server and will wait for output of the
    program sent back.
 
