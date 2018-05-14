@@ -15,9 +15,9 @@ SERVER_ADDR = sys.argv[1]
 NUM_MACHINE = sys.argv[2]
 
 # with open(OUTPUT_FILE, 'w', newline='') as csv_file:
-#     writer = csv.writer(csv_file, delimiter=',')
-#     data = ["Input", "NUM_ITERATION", "AVERAGE_TIME", "NUM_MACHINE"]
-#     writer.writerow(data)
+#    writer = csv.writer(csv_file, delimiter=',')
+#    data = ["Input", "NUM_ITERATION", "AVERAGE_TIME", "NUM_MACHINE"]
+#    writer.writerow(data)
 
 
 # Iterate through every input file
