@@ -14,8 +14,7 @@ typedef int (*real_main_t)(int argc, char** argv);
 typedef bool (*has_next_t)();
 typedef char* (*get_next_t)();
 
-const char* shared_library = "../src/shared_library/d-map-injection.so";
-const char* test_file = "test.txt";
+const char* shared_library = "../src/password_7char/password_7char.so";
 
 int main(int argc, char** argv) {
   errno = 0;
@@ -54,20 +53,5 @@ int main(int argc, char** argv) {
     real_main(3, argv);
   }
 
-  // Open the test file
-  // TODO: When we actually use this, the socket that connects the server is
-  // this new_output
-  //int new_output = open(test_file, O_WRONLY);
-  //if(new_output == -1) {
-  //  fprintf(stderr, "Failed to open output file %s\n", test_file);
-  //  exit(1);
-  //}
-
-  // Now swap this file in and use it as stdout 
-  //if(dup2(new_output, STDOUT_FILENO) == -1) {
-  //  fprintf(stderr, "Failed to set new file as output\n");
-  //  exit(2);
-  //} 
-
-  printf("Write to file test!\n");
+  return 0;
 }
