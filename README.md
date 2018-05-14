@@ -33,4 +33,42 @@ directory.
 2. `./worker <server_address>`
 3. The worker will then connect to the server and then wait for jobs
 
+## Example
+
+Below is a simple walkthrough of the password cracker program:
+
+1. Compile the system by running `make`.
+
+2. Server needs to start first: `./src/server/server`
+
+3. For each available worker machine to join the server: 
+
+```
+cd ./src/worker/
+./worker <SERVER_ADDRESS>
+```
+
+4. Then user joins the system and sends the password cracker program (**You need to change the input file (e.g. input-6.in and input-7.in to your own path**):
+
+```
+cd ./src/user/
+./user <SERVER_ADDRESS> < input-6.in
+```
+
+5. Wait for workers to complete the result and send output back to the server then from server to the user
+
+6. Expected output(Order may differ): 
+
+```
+vostinar cached
+stone chmcls
+kington divest
+curtsinger evlprf
+rebelsky glimmr
+wolz oliver
+walker robots
+osera snthtc
+weinman vizwiz
+klinge xaqznl
+```
 
